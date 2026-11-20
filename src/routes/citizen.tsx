@@ -1,9 +1,10 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   AlertCircle,
   Bot,
   FileText,
+  FileUp,
   FolderOpen,
   LayoutGrid,
   LifeBuoy,
@@ -16,6 +17,14 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { DashboardShell, type ShellNavItem } from "@/components/sathi/DashboardShell";
 import { Section } from "@/components/sathi/Section";
@@ -61,7 +70,31 @@ const nav: ShellNavItem[] = [
 ];
 
 function CitizenDashboard() {
-  const returned = citizenApplications.find((a) => a.status === "returned");
+  const [applications, setApplications] = useState(citizenApplications);
+  const [documents, setDocuments] = useState(citizenDocuments);
+  const [uploadOpen, setUploadOpen] = useState(false);
+
+  const returned = applications.find((a) => a.status === "returned");
+
+  function handleDocumentSubmitted() {
+    setApplications((apps) =>
+      apps.map((a) => {
+        if (a.status !== "returned") return a;
+        const { note: _note, ...rest } = a;
+        return { ...rest, status: "doc_pending" as const };
+      }),
+    );
+    setDocuments((docs) =>
+      docs.map((d) =>
+        d.status === "needs_update"
+          ? { ...d, status: "pending" as const, updated: "Just now (demo)" }
+          : d,
+      ),
+    );
+    toast.success("Document uploaded successfully (Demo Only).", {
+      description: "Your file was not sent anywhere — this is a simulated prototype flow.",
+    });
+  }
 
   return (
     <DashboardShell
@@ -95,11 +128,9 @@ function CitizenDashboard() {
               </p>
               <p className="text-muted-foreground">{returned.note}</p>
             </div>
-            <Button asChild variant="destructive" size="lg">
-              <a href="#documents">
-                <Upload />
-                Fix now
-              </a>
+            <Button variant="destructive" size="lg" onClick={() => setUploadOpen(true)}>
+              <Upload />
+              Fix now
             </Button>
           </div>
         )}
@@ -133,7 +164,7 @@ function CitizenDashboard() {
         action={<DemoBadge />}
       >
         <ul className="space-y-4">
-          {citizenApplications.map((app) => (
+          {applications.map((app) => (
             <li key={app.id} className="rounded-2xl border p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -182,7 +213,7 @@ function CitizenDashboard() {
       {/* Documents */}
       <Section id="documents" title="My documents" urdu="میرے کاغذات" action={<DemoBadge />}>
         <ul className="divide-y rounded-2xl border">
-          {citizenDocuments.map((doc) => {
+          {documents.map((doc) => {
             const meta = docStatusMeta[doc.status];
             return (
               <li key={doc.name} className="flex flex-wrap items-center gap-4 p-4">
@@ -197,14 +228,7 @@ function CitizenDashboard() {
                 </div>
                 <Badge variant={meta.variant}>{meta.label}</Badge>
                 {doc.status === "needs_update" && (
-                  <Button
-                    size="sm"
-                    onClick={() =>
-                      toast.success("Demo only", {
-                        description: "Uploading is disabled in this prototype.",
-                      })
-                    }
-                  >
+                  <Button size="sm" onClick={() => setUploadOpen(true)}>
                     <Upload />
                     Upload again
                   </Button>
@@ -234,7 +258,136 @@ function CitizenDashboard() {
           </div>
         </div>
       </Section>
+
+      <UploadDialog
+        open={uploadOpen}
+        onOpenChange={setUploadOpen}
+        onSubmitted={handleDocumentSubmitted}
+      />
     </DashboardShell>
+  );
+}
+
+const ACCEPTED_TYPES = ".jpg,.jpeg,.png,.pdf";
+const ACCEPTED_EXTENSIONS = ["jpg", "jpeg", "png", "pdf"];
+
+function UploadDialog({
+  open,
+  onOpenChange,
+  onSubmitted,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmitted: () => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!file || !file.type.startsWith("image/")) {
+      setPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  function reset() {
+    setFile(null);
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const selected = e.target.files?.[0];
+    if (!selected) return;
+    const ext = selected.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!ACCEPTED_EXTENSIONS.includes(ext)) {
+      toast.error("File type not supported", {
+        description: "Please choose a JPG, JPEG, PNG or PDF file.",
+      });
+      e.target.value = "";
+      return;
+    }
+    setFile(selected);
+  }
+
+  function handleSubmit() {
+    if (!file) return;
+    onSubmitted();
+    onOpenChange(false);
+    reset();
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        onOpenChange(next);
+        if (!next) reset();
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Upload document</DialogTitle>
+          <DialogDescription>
+            <Ur className="block">دستاویز اپ لوڈ کریں</Ur>
+            Choose a JPG, JPEG, PNG or PDF file. Demo only — your file stays on this device and is
+            not sent to any government department or permanently stored.
+          </DialogDescription>
+        </DialogHeader>
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept={ACCEPTED_TYPES}
+          onChange={handleFileChange}
+          className="sr-only"
+          aria-label="Choose document file"
+        />
+
+        {file ? (
+          <div className="space-y-3">
+            {previewUrl && (
+              <img
+                src={previewUrl}
+                alt={`Preview of ${file.name}`}
+                className="max-h-56 w-full rounded-xl border object-contain bg-muted"
+              />
+            )}
+            <div className="flex items-center gap-3 rounded-xl border bg-muted px-4 py-3">
+              <FileText className="size-5 shrink-0 text-primary" aria-hidden />
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                {file.name}
+              </span>
+              <Badge variant="gold">Demo</Badge>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="flex min-h-32 w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed bg-muted/50 p-6 text-center transition-colors hover:border-primary"
+          >
+            <FileUp className="size-8 text-primary" aria-hidden />
+            <span className="font-semibold text-foreground">Choose a file</span>
+            <span className="text-sm text-muted-foreground">JPG, JPEG, PNG or PDF</span>
+          </button>
+        )}
+
+        <DialogFooter className="gap-2 sm:justify-between">
+          <Button type="button" variant="outline" onClick={() => inputRef.current?.click()}>
+            <Upload />
+            {file ? "Choose a different file" : "Browse files"}
+          </Button>
+          <Button type="button" size="lg" disabled={!file} onClick={handleSubmit}>
+            <FileUp />
+            Submit Document
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -4,7 +4,7 @@
  * None of it refers to a real person, office or government programme.
  */
 
-export type AppStatus = "submitted" | "in_review" | "approved" | "returned";
+export type AppStatus = "submitted" | "in_review" | "approved" | "returned" | "doc_pending";
 
 export const statusMeta: Record<
   AppStatus,
@@ -14,6 +14,11 @@ export const statusMeta: Record<
   in_review: { label: "In review", urdu: "زیرِ جائزہ", variant: "warning" },
   approved: { label: "Approved", urdu: "منظور شدہ", variant: "success" },
   returned: { label: "Returned", urdu: "واپس بھیجی گئی", variant: "destructive" },
+  doc_pending: {
+    label: "Document Submitted – Pending Review",
+    urdu: "دستاویز جمع — زیرِ جائزہ",
+    variant: "info",
+  },
 };
 
 /* ---------------- Citizen ---------------- */

@@ -63,7 +63,7 @@ function OfficerDashboard() {
   const [filter, setFilter] = useState<Filter>("all");
 
   const counts = useMemo(() => {
-    const c: Record<Filter, number> = { all: queue.length, submitted: 0, in_review: 0, approved: 0, returned: 0 };
+    const c: Record<Filter, number> = { all: queue.length, submitted: 0, in_review: 0, approved: 0, returned: 0, doc_pending: 0 };
     queue.forEach((q) => (c[q.status] += 1));
     return c;
   }, [queue]);
