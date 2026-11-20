@@ -10,33 +10,73 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as CitizenRouteImport } from './routes/citizen'
+import { Route as HelperRouteImport } from './routes/helper'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as OfficerRouteImport } from './routes/officer'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CitizenRoute = CitizenRouteImport.update({
+  id: '/citizen',
+  path: '/citizen',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HelperRoute = HelperRouteImport.update({
+  id: '/helper',
+  path: '/helper',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OfficerRoute = OfficerRouteImport.update({
+  id: '/officer',
+  path: '/officer',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/citizen': typeof CitizenRoute
+  '/helper': typeof HelperRoute
+  '/login': typeof LoginRoute
+  '/officer': typeof OfficerRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/citizen': typeof CitizenRoute
+  '/helper': typeof HelperRoute
+  '/login': typeof LoginRoute
+  '/officer': typeof OfficerRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/citizen': typeof CitizenRoute
+  '/helper': typeof HelperRoute
+  '/login': typeof LoginRoute
+  '/officer': typeof OfficerRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/citizen' | '/helper' | '/login' | '/officer'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/citizen' | '/helper' | '/login' | '/officer'
+  id: '__root__' | '/' | '/citizen' | '/helper' | '/login' | '/officer'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CitizenRoute: typeof CitizenRoute
+  HelperRoute: typeof HelperRoute
+  LoginRoute: typeof LoginRoute
+  OfficerRoute: typeof OfficerRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +88,43 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/citizen': {
+      id: '/citizen'
+      path: '/citizen'
+      fullPath: '/citizen'
+      preLoaderRoute: typeof CitizenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/helper': {
+      id: '/helper'
+      path: '/helper'
+      fullPath: '/helper'
+      preLoaderRoute: typeof HelperRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/officer': {
+      id: '/officer'
+      path: '/officer'
+      fullPath: '/officer'
+      preLoaderRoute: typeof OfficerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CitizenRoute: CitizenRoute,
+  HelperRoute: HelperRoute,
+  LoginRoute: LoginRoute,
+  OfficerRoute: OfficerRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

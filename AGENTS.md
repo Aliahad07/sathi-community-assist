@@ -28,3 +28,10 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## Project rules (Sathi AI)
+
+- Frontend-only prototype: all records come from `src/lib/mock-data.ts`; no backend or external APIs until the user asks. Why: hackathon stage one is UI only.
+- Roles and their dashboard paths live in `src/lib/roles.ts`; login and landing read from it. Why: one source for role labels and routing.
+- Dashboards wrap content in `src/components/sathi/DashboardShell.tsx` and use in-page section anchors for navigation. Why: consistent shell across roles.
+- Urdu text is wrapped in the `Ur` component (sets `lang="ur"` + `dir="rtl"` for the Nastaliq font). Why: correct font and direction without per-element styling.
