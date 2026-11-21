@@ -1,6 +1,20 @@
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowLeftRight, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, RotateCcw, type LucideIcon } from "lucide-react";
+import { toast } from "sonner";
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { demoActions } from "@/lib/demo-store";
 
 import { Logo } from "./Logo";
 import { PrototypeBanner } from "./PrototypeBanner";
@@ -54,11 +68,12 @@ export function DashboardShell({
                 <p className="text-xs text-primary-foreground/70">{userMeta}</p>
               </div>
               <span
-                className="grid size-10 place-items-center rounded-full bg-gold text-sm font-bold text-gold-foreground"
+                className="hidden size-10 place-items-center rounded-full bg-gold text-sm font-bold text-gold-foreground sm:grid"
                 aria-hidden
               >
                 {initials}
               </span>
+              <ResetDemoButton />
               <Link
                 to="/login"
                 className="inline-flex h-10 items-center gap-2 rounded-xl border border-primary-foreground/25 px-3 text-sm font-semibold hover:bg-primary-foreground/10"
@@ -114,5 +129,42 @@ export function DashboardShell({
         <main className="min-w-0 space-y-6">{children}</main>
       </div>
     </div>
+  );
+}
+
+function ResetDemoButton() {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-10 items-center gap-2 rounded-xl bg-gold px-3 text-sm font-semibold text-gold-foreground hover:bg-gold/90"
+        >
+          <RotateCcw className="size-4" aria-hidden />
+          Reset demo
+        </button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Reset the demo?</AlertDialogTitle>
+          <AlertDialogDescription>
+            <Ur className="block">ڈیمو دوبارہ شروع کریں؟</Ur>
+            All uploads, approvals and returns made in this browser will be cleared and the
+            original sample records restored.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              demoActions.reset();
+              toast.success("Demo reset", { description: "Original sample records restored." });
+            }}
+          >
+            Yes, reset demo
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

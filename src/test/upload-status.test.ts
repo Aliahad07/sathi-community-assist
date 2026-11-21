@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { citizenApplications, citizenDocuments, statusMeta } from "@/lib/mock-data";
+import { citizenDocuments, demoApplications, statusMeta } from "@/lib/mock-data";
 
 describe("document re-upload flow", () => {
   it("uses the exact status text after a document is submitted", () => {
@@ -8,7 +8,7 @@ describe("document re-upload flow", () => {
   });
 
   it("demo data starts with a returned application and a document needing update", () => {
-    expect(citizenApplications.some((a) => a.status === "returned")).toBe(true);
+    expect(demoApplications.some((a) => a.status === "returned")).toBe(true);
     expect(citizenDocuments.some((d) => d.status === "needs_update")).toBe(true);
   });
 });

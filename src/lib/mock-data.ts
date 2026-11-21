@@ -29,46 +29,90 @@ export const demoCitizen = {
   citizenId: "DEMO-CZ-0142",
 };
 
-export interface CitizenApplication {
+export type Priority = "high" | "normal";
+
+/** Demo metadata for a simulated upload. The file itself is never stored. */
+export interface DocumentSubmission {
+  fileName: string;
+  uploadedAt: string; // ISO timestamp
+}
+
+export interface OfficerDecision {
+  outcome: "approved" | "returned";
+  reason?: string;
+  decidedAt: string; // ISO timestamp
+  officer: string;
+}
+
+/** One application record shared by the citizen and officer dashboards. */
+export interface DemoApplication {
   id: string;
   service: string;
   serviceUrdu: string;
   department: string;
+  applicant: string; // display name shown to officers
+  citizenId: string | null; // owner shown on the citizen dashboard
+  area: string;
   submitted: string;
+  priority: Priority;
+  viaHelper: boolean;
+  inOfficerQueue: boolean;
   status: AppStatus;
-  step: number; // 1-4
   note?: string;
+  submission?: DocumentSubmission;
+  decision?: OfficerDecision;
 }
 
-export const citizenApplications: CitizenApplication[] = [
+export const demoApplications: DemoApplication[] = [
   {
     id: "APP-DEMO-1021",
     service: "Family Support Grant",
     serviceUrdu: "خاندانی امدادی گرانٹ",
     department: "Social Welfare (Demo)",
+    applicant: "Ayesha B.",
+    citizenId: "DEMO-CZ-0142",
+    area: "Ward 7",
     submitted: "12 Nov 2026",
+    priority: "high",
+    viaHelper: false,
+    inOfficerQueue: true,
     status: "in_review",
-    step: 2,
   },
   {
     id: "APP-DEMO-0987",
     service: "Birth Certificate Request",
     serviceUrdu: "پیدائش سرٹیفکیٹ",
     department: "Union Council (Demo)",
+    applicant: "Ayesha B.",
+    citizenId: "DEMO-CZ-0142",
+    area: "Ward 7",
     submitted: "28 Oct 2026",
+    priority: "normal",
+    viaHelper: false,
+    inOfficerQueue: false,
     status: "approved",
-    step: 4,
   },
   {
     id: "APP-DEMO-1050",
     service: "Electricity Bill Relief",
     serviceUrdu: "بجلی بل ریلیف",
     department: "Energy Relief Cell (Demo)",
+    applicant: "Ayesha B.",
+    citizenId: "DEMO-CZ-0142",
+    area: "Ward 7",
     submitted: "17 Nov 2026",
+    priority: "normal",
+    viaHelper: false,
+    inOfficerQueue: true,
     status: "returned",
-    step: 2,
     note: "Please upload a clearer photo of your latest bill.",
   },
+  { id: "APP-DEMO-1033", service: "Family Support Grant", serviceUrdu: "خاندانی امدادی گرانٹ", department: "Social Welfare (Demo)", applicant: "Rashida K.", citizenId: null, area: "Ward 7", submitted: "14 Nov 2026", priority: "high", viaHelper: true, inOfficerQueue: true, status: "submitted" },
+  { id: "APP-DEMO-1036", service: "Disability Allowance", serviceUrdu: "معذوری الاؤنس", department: "Social Welfare (Demo)", applicant: "Imran S.", citizenId: null, area: "Ward 3", submitted: "15 Nov 2026", priority: "normal", viaHelper: false, inOfficerQueue: true, status: "submitted" },
+  { id: "APP-DEMO-1040", service: "School Fee Support", serviceUrdu: "اسکول فیس امداد", department: "Social Welfare (Demo)", applicant: "Muhammad A.", citizenId: null, area: "Ward 7", submitted: "15 Nov 2026", priority: "normal", viaHelper: true, inOfficerQueue: true, status: "in_review" },
+  { id: "APP-DEMO-1044", service: "Widow Support", serviceUrdu: "بیوہ امداد", department: "Social Welfare (Demo)", applicant: "Fatima Z.", citizenId: null, area: "Ward 5", submitted: "16 Nov 2026", priority: "high", viaHelper: false, inOfficerQueue: true, status: "submitted" },
+  { id: "APP-DEMO-1047", service: "Disability Allowance", serviceUrdu: "معذوری الاؤنس", department: "Social Welfare (Demo)", applicant: "Tariq J.", citizenId: null, area: "Ward 1", submitted: "17 Nov 2026", priority: "normal", viaHelper: false, inOfficerQueue: true, status: "approved" },
+  { id: "APP-DEMO-1052", service: "School Fee Support", serviceUrdu: "اسکول فیس امداد", department: "Social Welfare (Demo)", applicant: "Kalsoom B.", citizenId: null, area: "Ward 7", submitted: "18 Nov 2026", priority: "normal", viaHelper: true, inOfficerQueue: true, status: "submitted" },
 ];
 
 export const applicationSteps = [
@@ -80,13 +124,22 @@ export const applicationSteps = [
 
 export type DocStatus = "verified" | "pending" | "needs_update";
 
-export const citizenDocuments: { name: string; urdu: string; status: DocStatus; updated: string }[] =
-  [
-    { name: "Identity card copy", urdu: "شناختی کارڈ کی کاپی", status: "verified", updated: "02 Nov 2026" },
-    { name: "Proof of address", urdu: "پتے کا ثبوت", status: "verified", updated: "02 Nov 2026" },
-    { name: "Electricity bill (Oct)", urdu: "بجلی کا بل", status: "needs_update", updated: "17 Nov 2026" },
-    { name: "Family registration form", urdu: "خاندانی اندراج فارم", status: "pending", updated: "12 Nov 2026" },
-  ];
+export interface DemoDocument {
+  name: string;
+  urdu: string;
+  status: DocStatus;
+  updated: string;
+  /** Application this document belongs to, when it is tied to one. */
+  applicationId?: string;
+  fileName?: string;
+}
+
+export const citizenDocuments: DemoDocument[] = [
+  { name: "Identity card copy", urdu: "شناختی کارڈ کی کاپی", status: "verified", updated: "02 Nov 2026" },
+  { name: "Proof of address", urdu: "پتے کا ثبوت", status: "verified", updated: "02 Nov 2026" },
+  { name: "Electricity bill (Oct)", urdu: "بجلی کا بل", status: "needs_update", updated: "17 Nov 2026", applicationId: "APP-DEMO-1050" },
+  { name: "Family registration form", urdu: "خاندانی اندراج فارم", status: "pending", updated: "12 Nov 2026" },
+];
 
 export const docStatusMeta: Record<
   DocStatus,
@@ -178,30 +231,6 @@ export const demoOfficer = {
   title: "Review Officer",
   department: "Social Welfare — Demo Unit",
 };
-
-export type Priority = "high" | "normal";
-
-export interface QueueItem {
-  id: string;
-  applicant: string;
-  service: string;
-  area: string;
-  submitted: string;
-  priority: Priority;
-  status: AppStatus;
-  viaHelper: boolean;
-}
-
-export const officerQueue: QueueItem[] = [
-  { id: "APP-DEMO-1021", applicant: "Ayesha B.", service: "Family Support Grant", area: "Ward 7", submitted: "12 Nov", priority: "high", status: "in_review", viaHelper: false },
-  { id: "APP-DEMO-1033", applicant: "Rashida K.", service: "Family Support Grant", area: "Ward 7", submitted: "14 Nov", priority: "high", status: "submitted", viaHelper: true },
-  { id: "APP-DEMO-1036", applicant: "Imran S.", service: "Disability Allowance", area: "Ward 3", submitted: "15 Nov", priority: "normal", status: "submitted", viaHelper: false },
-  { id: "APP-DEMO-1040", applicant: "Muhammad A.", service: "School Fee Support", area: "Ward 7", submitted: "15 Nov", priority: "normal", status: "in_review", viaHelper: true },
-  { id: "APP-DEMO-1044", applicant: "Fatima Z.", service: "Widow Support", area: "Ward 5", submitted: "16 Nov", priority: "high", status: "submitted", viaHelper: false },
-  { id: "APP-DEMO-1047", applicant: "Tariq J.", service: "Disability Allowance", area: "Ward 1", submitted: "17 Nov", priority: "normal", status: "approved", viaHelper: false },
-  { id: "APP-DEMO-1050", applicant: "Ayesha B.", service: "Electricity Bill Relief", area: "Ward 7", submitted: "17 Nov", priority: "normal", status: "returned", viaHelper: false },
-  { id: "APP-DEMO-1052", applicant: "Kalsoom B.", service: "School Fee Support", area: "Ward 7", submitted: "18 Nov", priority: "normal", status: "submitted", viaHelper: true },
-];
 
 export const weeklyVolume = [
   { day: "Mon", count: 38 },

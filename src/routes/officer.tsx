@@ -4,6 +4,8 @@ import {
   BarChart3,
   CheckCircle2,
   Clock,
+  Eye,
+  FileText,
   HandHeart,
   Inbox,
   LayoutGrid,
@@ -15,6 +17,16 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { DashboardShell, type ShellNavItem } from "@/components/sathi/DashboardShell";
 import { Section } from "@/components/sathi/Section";
 import { StatCard } from "@/components/sathi/StatCard";
@@ -22,11 +34,13 @@ import { DemoBadge, StatusBadge } from "@/components/sathi/StatusBadge";
 import { Ur } from "@/components/sathi/Ur";
 import {
   demoOfficer,
-  officerQueue,
   statusMeta,
   weeklyVolume,
   type AppStatus,
+  type DemoApplication,
 } from "@/lib/mock-data";
+import { demoActions, useDemoStore } from "@/lib/demo-store";
+import { formatDateTime, isOpenForDecision } from "@/lib/demo-workflow";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/officer")({
@@ -56,11 +70,16 @@ const nav: ShellNavItem[] = [
 ];
 
 type Filter = AppStatus | "all";
-const filterOrder: Filter[] = ["all", "submitted", "in_review", "approved", "returned"];
+const filterOrder: Filter[] = ["all", "doc_pending", "submitted", "in_review", "approved", "returned"];
 
 function OfficerDashboard() {
-  const [queue, setQueue] = useState(officerQueue);
+  const { applications } = useDemoStore();
+  const queue = useMemo(() => applications.filter((a) => a.inOfficerQueue), [applications]);
   const [filter, setFilter] = useState<Filter>("all");
+  const [detailsId, setDetailsId] = useState<string | null>(null);
+  const [returnId, setReturnId] = useState<string | null>(null);
+  const details = queue.find((q) => q.id === detailsId);
+  const returning = queue.find((q) => q.id === returnId);
 
   const counts = useMemo(() => {
     const c: Record<Filter, number> = { all: queue.length, submitted: 0, in_review: 0, approved: 0, returned: 0, doc_pending: 0 };
@@ -71,10 +90,18 @@ function OfficerDashboard() {
   const visible = filter === "all" ? queue : queue.filter((q) => q.status === filter);
   const maxVolume = Math.max(...weeklyVolume.map((d) => d.count));
 
-  function decide(id: string, status: AppStatus) {
-    setQueue((qs) => qs.map((q) => (q.id === id ? { ...q, status } : q)));
-    toast.success(`${id} marked as ${statusMeta[status].label.toLowerCase()}`, {
-      description: "Demo action — nothing is sent to any real system.",
+  function approve(id: string) {
+    demoActions.approve(id);
+    toast.success(`${id} marked as approved`, {
+      description: "Demo action — saved in this browser only, nothing is sent to any real system.",
+    });
+  }
+
+  function confirmReturn(id: string, reason: string) {
+    demoActions.returnWithReason(id, reason);
+    setReturnId(null);
+    toast.success(`${id} returned to the applicant`, {
+      description: "Demo action — your reason is shown on the citizen dashboard.",
     });
   }
 
@@ -110,7 +137,7 @@ function OfficerDashboard() {
         id="queue"
         title="Application queue"
         urdu="درخواستوں کی قطار"
-        description="Approve or return applications. Changes stay on this page only."
+        description="Open, approve or return applications. Decisions are saved in this browser for the demo."
       >
         <div className="scrollbar-none -mx-1 flex gap-2 overflow-x-auto px-1 pb-1" role="group" aria-label="Filter by status">
           {filterOrder.map((f) => (
@@ -141,7 +168,7 @@ function OfficerDashboard() {
 
         <ul className="mt-5 space-y-3">
           {visible.map((item) => {
-            const open = item.status === "submitted" || item.status === "in_review";
+            const open = isOpenForDecision(item.status);
             return (
               <li
                 key={item.id}
@@ -162,16 +189,34 @@ function OfficerDashboard() {
                   <p className="text-sm text-muted-foreground">
                     {item.applicant} · {item.area} · Submitted {item.submitted}
                   </p>
+                  {item.submission && (
+                    <p className="mt-1 flex items-center gap-2 text-sm text-foreground">
+                      <FileText className="size-4 shrink-0 text-primary" aria-hidden />
+                      <span className="truncate font-medium">{item.submission.fileName}</span>
+                      <span className="shrink-0 text-muted-foreground">
+                        · {formatDateTime(item.submission.uploadedAt)}
+                      </span>
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusBadge status={item.status} />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setDetailsId(item.id)}
+                    aria-label={`View details for ${item.id}`}
+                  >
+                    <Eye />
+                    Details
+                  </Button>
                   {open && (
                     <>
-                      <Button size="sm" variant="success" onClick={() => decide(item.id, "approved")}>
+                      <Button size="sm" variant="success" onClick={() => approve(item.id)}>
                         <CheckCircle2 />
                         Approve
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => decide(item.id, "returned")}>
+                      <Button size="sm" variant="outline" onClick={() => setReturnId(item.id)}>
                         <RotateCcw />
                         Return
                       </Button>
@@ -208,6 +253,185 @@ function OfficerDashboard() {
           ))}
         </div>
       </Section>
+
+      <DetailsDialog
+        app={details}
+        onClose={() => setDetailsId(null)}
+        onApprove={(id) => {
+          approve(id);
+          setDetailsId(null);
+        }}
+        onReturn={(id) => {
+          setDetailsId(null);
+          setReturnId(id);
+        }}
+      />
+      <ReturnDialog app={returning} onClose={() => setReturnId(null)} onConfirm={confirmReturn} />
     </DashboardShell>
+  );
+}
+
+function DetailsDialog({
+  app,
+  onClose,
+  onApprove,
+  onReturn,
+}: {
+  app: DemoApplication | undefined;
+  onClose: () => void;
+  onApprove: (id: string) => void;
+  onReturn: (id: string) => void;
+}) {
+  const rows: [string, string][] = app
+    ? [
+        ["Application ID", app.id],
+        ["Applicant", app.applicant],
+        ["Service", app.service],
+        ["Department", app.department],
+        ["Area", app.area],
+        ["Submitted", app.submitted],
+        ["Priority", app.priority === "high" ? "High" : "Normal"],
+        ["Submitted via", app.viaHelper ? "Community helper" : "Citizen"],
+      ]
+    : [];
+  return (
+    <Dialog open={app !== undefined} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        {app && (
+          <>
+            <DialogHeader>
+              <DialogTitle>{app.service}</DialogTitle>
+              <DialogDescription>
+                <Ur className="block">درخواست کی تفصیل</Ur>
+                Synthetic demo record — not a real applicant.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex items-center gap-2">
+              <StatusBadge status={app.status} />
+            </div>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-xl bg-muted p-4 text-sm">
+              {rows.map(([k, v]) => (
+                <div key={k} className="contents">
+                  <dt className="text-muted-foreground">{k}</dt>
+                  <dd className="font-medium text-foreground">{v}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="rounded-xl border p-4 text-sm">
+              <p className="font-semibold text-foreground">Document</p>
+              {app.submission ? (
+                <p className="mt-1 text-muted-foreground">
+                  <span className="font-medium text-foreground">{app.submission.fileName}</span>{" "}
+                  · uploaded {formatDateTime(app.submission.uploadedAt)}. Demo only — the file
+                  itself was not sent or stored.
+                </p>
+              ) : (
+                <p className="mt-1 text-muted-foreground">No new document uploaded in this demo.</p>
+              )}
+            </div>
+            {app.decision && (
+              <div className="rounded-xl border p-4 text-sm">
+                <p className="font-semibold text-foreground">Last decision</p>
+                <p className="mt-1 text-muted-foreground">
+                  {app.decision.outcome === "approved" ? "Approved" : "Returned"} by{" "}
+                  {app.decision.officer} · {formatDateTime(app.decision.decidedAt)}
+                </p>
+                {app.decision.reason && (
+                  <p className="mt-1 text-foreground">Reason: {app.decision.reason}</p>
+                )}
+              </div>
+            )}
+            {isOpenForDecision(app.status) && (
+              <DialogFooter className="gap-2">
+                <Button variant="outline" onClick={() => onReturn(app.id)}>
+                  <RotateCcw />
+                  Return
+                </Button>
+                <Button variant="success" onClick={() => onApprove(app.id)}>
+                  <CheckCircle2 />
+                  Approve
+                </Button>
+              </DialogFooter>
+            )}
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ReturnDialog({
+  app,
+  onClose,
+  onConfirm,
+}: {
+  app: DemoApplication | undefined;
+  onClose: () => void;
+  onConfirm: (id: string, reason: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [touched, setTouched] = useState(false);
+  const missing = reason.trim().length === 0;
+
+  function close() {
+    setReason("");
+    setTouched(false);
+    onClose();
+  }
+
+  return (
+    <Dialog open={app !== undefined} onOpenChange={(open) => !open && close()}>
+      <DialogContent className="sm:max-w-md">
+        {app && (
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setTouched(true);
+              if (missing) return;
+              onConfirm(app.id, reason);
+              setReason("");
+              setTouched(false);
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Return {app.id}</DialogTitle>
+              <DialogDescription>
+                <Ur className="block">واپسی کی وجہ لکھیں</Ur>
+                Tell the applicant what to fix. They will see this reason on their dashboard.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              <Label htmlFor="return-reason">Reason for returning (required)</Label>
+              <Textarea
+                id="return-reason"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                onBlur={() => setTouched(true)}
+                aria-invalid={touched && missing}
+                aria-describedby="return-reason-error"
+                rows={4}
+                placeholder="e.g. The bill photo is blurry. Please upload a clearer copy."
+                className="text-base"
+              />
+              {touched && missing && (
+                <p id="return-reason-error" className="text-sm font-medium text-destructive">
+                  Please write a reason before returning.
+                </p>
+              )}
+            </div>
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="outline" onClick={close}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="destructive">
+                <RotateCcw />
+                Return application
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

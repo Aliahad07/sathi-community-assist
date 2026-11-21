@@ -33,12 +33,12 @@ import { Ur } from "@/components/sathi/Ur";
 import {
   applicationSteps,
   assistantSuggestions,
-  citizenApplications,
-  citizenDocuments,
   demoCitizen,
   demoHelper,
   docStatusMeta,
 } from "@/lib/mock-data";
+import { demoActions, useDemoStore } from "@/lib/demo-store";
+import { formatDateTime, stepFor, welcomeSummary } from "@/lib/demo-workflow";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/citizen")({
@@ -70,29 +70,19 @@ const nav: ShellNavItem[] = [
 ];
 
 function CitizenDashboard() {
-  const [applications, setApplications] = useState(citizenApplications);
-  const [documents, setDocuments] = useState(citizenDocuments);
-  const [uploadOpen, setUploadOpen] = useState(false);
+  const store = useDemoStore();
+  const applications = store.applications.filter((a) => a.citizenId === demoCitizen.citizenId);
+  const documents = store.documents;
+  const [uploadFor, setUploadFor] = useState<string | null>(null);
 
-  const returned = applications.find((a) => a.status === "returned");
+  const returnedApps = applications.filter((a) => a.status === "returned");
+  const uploadTarget = applications.find((a) => a.id === uploadFor);
 
-  function handleDocumentSubmitted() {
-    setApplications((apps) =>
-      apps.map((a) => {
-        if (a.status !== "returned") return a;
-        const { note: _note, ...rest } = a;
-        return { ...rest, status: "doc_pending" as const };
-      }),
-    );
-    setDocuments((docs) =>
-      docs.map((d) =>
-        d.status === "needs_update"
-          ? { ...d, status: "pending" as const, updated: "Just now (demo)" }
-          : d,
-      ),
-    );
+  function handleDocumentSubmitted(fileName: string) {
+    if (!uploadFor) return;
+    demoActions.submitDocument(uploadFor, fileName);
     toast.success("Document uploaded successfully (Demo Only).", {
-      description: "Your file was not sent anywhere — this is a simulated prototype flow.",
+      description: "Only the file name was saved in this browser — the file was not sent anywhere.",
     });
   }
 
@@ -111,13 +101,14 @@ function CitizenDashboard() {
             <Ur className="text-xl text-gold">السلام علیکم</Ur>
             <h1 className="mt-1 text-3xl font-semibold sm:text-4xl">Welcome, {demoCitizen.name}</h1>
             <p className="mt-2 text-primary-foreground/75">
-              You have {citizenApplications.length} applications. One needs your attention.
+              {welcomeSummary(applications)}
             </p>
           </div>
         </div>
 
-        {returned && (
+        {returnedApps.map((returned) => (
           <div
+            key={returned.id}
             role="alert"
             className="mt-4 flex flex-col gap-4 rounded-2xl border border-destructive/30 bg-danger-soft p-5 sm:flex-row sm:items-center"
           >
@@ -128,12 +119,12 @@ function CitizenDashboard() {
               </p>
               <p className="text-muted-foreground">{returned.note}</p>
             </div>
-            <Button variant="destructive" size="lg" onClick={() => setUploadOpen(true)}>
+            <Button variant="destructive" size="lg" onClick={() => setUploadFor(returned.id)}>
               <Upload />
               Fix now
             </Button>
           </div>
-        )}
+        ))}
 
         <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
           {nav.slice(1).map((item) => (
@@ -178,8 +169,9 @@ function CitizenDashboard() {
               </div>
               <ol className="mt-5 grid grid-cols-4 gap-2" aria-label="Progress">
                 {applicationSteps.map((s, i) => {
-                  const done = i < app.step;
-                  const isReturned = app.status === "returned" && i === app.step - 1;
+                  const step = stepFor(app.status);
+                  const done = i < step;
+                  const isReturned = app.status === "returned" && i === step - 1;
                   return (
                     <li key={s.label} className="flex flex-col gap-2">
                       <span
@@ -200,6 +192,17 @@ function CitizenDashboard() {
                   );
                 })}
               </ol>
+              {app.submission && (
+                <p className="mt-4 text-sm text-muted-foreground">
+                  Document: <span className="font-medium text-foreground">{app.submission.fileName}</span>{" "}
+                  · uploaded {formatDateTime(app.submission.uploadedAt)} (demo)
+                </p>
+              )}
+              {app.decision?.outcome === "approved" && app.status === "approved" && (
+                <p className="mt-4 rounded-xl bg-success-soft px-4 py-3 text-sm text-foreground">
+                  Approved by {app.decision.officer} on {formatDateTime(app.decision.decidedAt)} (demo)
+                </p>
+              )}
               {app.note && (
                 <p className="mt-4 rounded-xl bg-danger-soft px-4 py-3 text-sm text-destructive">
                   Officer note: {app.note}
@@ -224,11 +227,12 @@ function CitizenDashboard() {
                   <p className="font-semibold text-foreground">{doc.name}</p>
                   <p className="text-sm text-muted-foreground">
                     <Ur className="me-2">{doc.urdu}</Ur>· Updated {doc.updated}
+                    {doc.fileName && <> · {doc.fileName}</>}
                   </p>
                 </div>
                 <Badge variant={meta.variant}>{meta.label}</Badge>
-                {doc.status === "needs_update" && (
-                  <Button size="sm" onClick={() => setUploadOpen(true)}>
+                {doc.status === "needs_update" && doc.applicationId && (
+                  <Button size="sm" onClick={() => setUploadFor(doc.applicationId ?? null)}>
                     <Upload />
                     Upload again
                   </Button>
@@ -260,8 +264,11 @@ function CitizenDashboard() {
       </Section>
 
       <UploadDialog
-        open={uploadOpen}
-        onOpenChange={setUploadOpen}
+        open={uploadFor !== null}
+        serviceName={uploadTarget?.service}
+        onOpenChange={(open) => {
+          if (!open) setUploadFor(null);
+        }}
         onSubmitted={handleDocumentSubmitted}
       />
     </DashboardShell>
@@ -273,12 +280,14 @@ const ACCEPTED_EXTENSIONS = ["jpg", "jpeg", "png", "pdf"];
 
 function UploadDialog({
   open,
+  serviceName,
   onOpenChange,
   onSubmitted,
 }: {
   open: boolean;
+  serviceName: string | undefined;
   onOpenChange: (open: boolean) => void;
-  onSubmitted: () => void;
+  onSubmitted: (fileName: string) => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -315,7 +324,7 @@ function UploadDialog({
 
   function handleSubmit() {
     if (!file) return;
-    onSubmitted();
+    onSubmitted(file.name);
     onOpenChange(false);
     reset();
   }
@@ -330,7 +339,7 @@ function UploadDialog({
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Upload document</DialogTitle>
+          <DialogTitle>Upload document{serviceName ? ` — ${serviceName}` : ""}</DialogTitle>
           <DialogDescription>
             <Ur className="block">دستاویز اپ لوڈ کریں</Ur>
             Choose a JPG, JPEG, PNG or PDF file. Demo only — your file stays on this device and is
