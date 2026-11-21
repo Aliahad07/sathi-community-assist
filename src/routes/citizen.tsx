@@ -337,7 +337,7 @@ function UploadDialog({
         if (!next) reset();
       }}
     >
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="grid-cols-[minmax(0,1fr)] sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Upload document{serviceName ? ` — ${serviceName}` : ""}</DialogTitle>
           <DialogDescription>
@@ -385,12 +385,23 @@ function UploadDialog({
           </button>
         )}
 
-        <DialogFooter className="gap-2 sm:justify-between">
-          <Button type="button" variant="outline" onClick={() => inputRef.current?.click()}>
+        <DialogFooter className="gap-2 sm:flex-col-reverse sm:space-x-0">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-auto min-h-10 w-full whitespace-normal py-2"
+            onClick={() => inputRef.current?.click()}
+          >
             <Upload />
             {file ? "Choose a different file" : "Browse files"}
           </Button>
-          <Button type="button" size="lg" disabled={!file} onClick={handleSubmit}>
+          <Button
+            type="button"
+            size="lg"
+            className="h-auto min-h-11 w-full whitespace-normal py-2"
+            disabled={!file}
+            onClick={handleSubmit}
+          >
             <FileUp />
             Submit Document
           </Button>

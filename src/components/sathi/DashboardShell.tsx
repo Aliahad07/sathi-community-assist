@@ -54,16 +54,16 @@ export function DashboardShell({
         <PrototypeBanner />
         <header className="bg-gradient-navy text-primary-foreground">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-            <div className="flex items-center gap-4">
+            <div className="flex min-w-0 items-center gap-4">
               <Logo tone="light" />
               <span className="hidden h-8 w-px bg-primary-foreground/20 sm:block" aria-hidden />
-              <div className="hidden sm:block">
+              <div className="hidden min-w-0 sm:block">
                 <p className="text-sm font-semibold">{info.label} dashboard</p>
                 <Ur className="text-xs text-primary-foreground/70">{info.urdu}</Ur>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="hidden text-right md:block">
+            <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+              <div className="hidden text-right lg:block">
                 <p className="text-sm font-semibold">{userName}</p>
                 <p className="text-xs text-primary-foreground/70">{userMeta}</p>
               </div>
@@ -76,7 +76,7 @@ export function DashboardShell({
               <ResetDemoButton />
               <Link
                 to="/login"
-                className="inline-flex h-10 items-center gap-2 rounded-xl border border-primary-foreground/25 px-3 text-sm font-semibold hover:bg-primary-foreground/10"
+                className="inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-xl border border-primary-foreground/25 px-3 text-sm font-semibold hover:bg-primary-foreground/10"
               >
                 <ArrowLeftRight className="size-4" aria-hidden />
                 <span className="hidden sm:inline">Switch role</span>
@@ -138,10 +138,12 @@ function ResetDemoButton() {
       <AlertDialogTrigger asChild>
         <button
           type="button"
-          className="inline-flex h-10 items-center gap-2 rounded-xl bg-gold px-3 text-sm font-semibold text-gold-foreground hover:bg-gold/90"
+          aria-label="Reset demo"
+          className="inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-xl bg-gold px-3 text-sm font-semibold text-gold-foreground hover:bg-gold/90"
         >
           <RotateCcw className="size-4" aria-hidden />
-          Reset demo
+          <span className="sm:hidden">Reset</span>
+          <span className="hidden sm:inline">Reset demo</span>
         </button>
       </AlertDialogTrigger>
       <AlertDialogContent>
