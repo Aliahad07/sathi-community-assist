@@ -17,4 +17,5 @@
 
 ## Later
 - [ ] Administrator dashboard
-- [ ] Backend and real AI assistant
+- [ ] Backend on the user's own Supabase project — blocked: user must connect it in Project Settings → General → External Supabase
+- [ ] Real AI assistant
