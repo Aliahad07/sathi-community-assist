@@ -1,29 +1,21 @@
-import { useState } from "react";
+﻿import { useState, type FormEvent } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ArrowRight, Check, FlaskConical, Lock } from "lucide-react";
+import { ArrowRight, FlaskConical } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/sathi/Logo";
 import { PrototypeBanner } from "@/components/sathi/PrototypeBanner";
-import { Ur } from "@/components/sathi/Ur";
+import { getSupabase } from "@/lib/supabase";
 import { roles, type RoleId } from "@/lib/roles";
-import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
     meta: [
-      { title: "Demo sign in — Sathi AI Prototype" },
+      { title: "Sign in — Sathi AI" },
       {
         name: "description",
-        content: "Choose a demo role to explore the Sathi AI prototype. No real account needed.",
+        content: "Secure sign in to the Sathi AI public assistance prototype.",
       },
-      { property: "og:title", content: "Demo sign in — Sathi AI Prototype" },
-      {
-        property: "og:description",
-        content: "Pick Citizen, Community Helper or Officer to explore the Sathi AI demo.",
-      },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: LoginPage,
@@ -31,127 +23,209 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const navigate = useNavigate();
-  const [selected, setSelected] = useState<RoleId>("citizen");
-  const current = roles.find((r) => r.id === selected);
 
-  function handleContinue() {
-    if (current?.path) navigate({ to: current.path });
+  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  async function openDashboard(userId: string) {
+    const supabase = getSupabase();
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role, full_name")
+      .eq("id", userId)
+      .single();
+
+    if (profileError || !profile) {
+      throw new Error("Your user profile could not be loaded. Contact the administrator.");
+    }
+
+    const role = profile.role as RoleId;
+    const roleInfo = roles.find((item) => item.id === role);
+
+    if (!roleInfo || !roleInfo.path) {
+      throw new Error("Your account role does not have an available dashboard yet.");
+    }
+
+    await navigate({ to: roleInfo.path });
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+
+    if (!email.trim() || !password) {
+      setError("Please enter your email and password.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const supabase = getSupabase();
+
+      if (mode === "signup") {
+        const { data, error: signupError } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+        });
+
+        if (signupError) throw signupError;
+
+        if (!data.session) {
+          setMessage("Account created. Check your email to confirm your account, then sign in.");
+          setMode("login");
+          return;
+        }
+
+        await openDashboard(data.user.id);
+      } else {
+        const { data, error: loginError } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+
+        if (loginError) throw loginError;
+        if (!data.user) throw new Error("Login failed. Please try again.");
+
+        await openDashboard(data.user.id);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <PrototypeBanner />
+
       <div className="grid flex-1 lg:grid-cols-[0.9fr_1.1fr]">
-        {/* Brand panel */}
-        <aside className="relative hidden overflow-hidden bg-gradient-navy p-12 text-primary-foreground lg:flex lg:flex-col lg:justify-between">
-          <div className="bg-pattern-grid absolute inset-0" aria-hidden />
-          <Logo tone="light" className="relative" />
-          <div className="relative">
+        <aside className="relative hidden flex-col justify-between overflow-hidden bg-gradient-navy p-12 text-primary-foreground lg:flex">
+          <Logo tone="light" />
+
+          <div>
             <h1 className="text-4xl font-semibold leading-tight">
               Welcome to Sathi.
               <br />
-              <span className="text-gradient-gold">Pick a role to explore.</span>
+              <span className="text-gradient-gold">Assistance made accessible.</span>
             </h1>
-            <Ur className="mt-4 block text-2xl text-primary-foreground/80">
-              ساتھی میں خوش آمدید
-            </Ur>
-            <ul className="mt-8 space-y-3 text-primary-foreground/80">
-              {[
-                "No password — this is a demo sign in",
-                "Every name and record is synthetic",
-                "No government system is connected",
-              ].map((t) => (
-                <li key={t} className="flex items-center gap-3">
-                  <span className="grid size-6 place-items-center rounded-full bg-gold text-gold-foreground">
-                    <Check className="size-4" aria-hidden />
-                  </span>
-                  {t}
-                </li>
-              ))}
+
+            <p className="mt-5 max-w-md text-primary-foreground/75">
+              A digital public assistance platform designed to help citizens access services,
+              track applications and connect with community support.
+            </p>
+
+            <ul className="mt-8 space-y-3 text-sm text-primary-foreground/80">
+              <li>Secure account authentication</li>
+              <li>Role-based access to dashboards</li>
+              <li>Synthetic hackathon demonstration data</li>
             </ul>
           </div>
-          <p className="relative text-sm text-primary-foreground/50">
-            Hackathon prototype · Not an official service
+
+          <p className="text-sm text-primary-foreground/50">
+            Hackathon prototype · Not an official government service
           </p>
         </aside>
 
-        {/* Role selection */}
         <main className="flex items-center justify-center px-4 py-10 sm:px-8">
-          <div className="w-full max-w-xl">
+          <div className="w-full max-w-md">
             <Logo className="mb-8 lg:hidden" />
+
             <span className="inline-flex items-center gap-2 rounded-full bg-gold-soft px-3 py-1 text-sm font-semibold text-accent-foreground">
-              <FlaskConical className="size-4" aria-hidden />
-              Demo sign in
+              <FlaskConical className="size-4" />
+              Secure account access
             </span>
-            <h2 className="mt-4 text-3xl font-semibold text-primary sm:text-4xl">
-              Choose your role
+
+            <h2 className="mt-5 text-3xl font-semibold text-primary">
+              {mode === "login" ? "Welcome back" : "Create your account"}
             </h2>
-            <Ur className="text-xl text-muted-foreground">اپنا کردار منتخب کریں</Ur>
 
-            <div role="radiogroup" aria-label="Demo role" className="mt-8 grid gap-3">
-              {roles.map((role) => {
-                const disabled = role.path === null;
-                const active = selected === role.id;
-                return (
-                  <button
-                    key={role.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    disabled={disabled}
-                    onClick={() => setSelected(role.id)}
-                    className={cn(
-                      "flex w-full items-center gap-4 rounded-2xl border-2 bg-card p-4 text-left transition-all sm:p-5",
-                      active
-                        ? "border-primary shadow-card"
-                        : "border-border hover:border-primary/40",
-                      disabled && "cursor-not-allowed opacity-60 hover:border-border",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "grid size-12 shrink-0 place-items-center rounded-xl",
-                        active ? "bg-primary text-primary-foreground" : "bg-secondary text-primary",
-                      )}
-                    >
-                      <role.icon className="size-6" aria-hidden />
-                    </span>
-                    <span className="flex-1">
-                      <span className="flex flex-wrap items-baseline gap-x-3">
-                        <span className="text-lg font-semibold text-foreground">{role.label}</span>
-                        <Ur className="text-sm text-muted-foreground">{role.urdu}</Ur>
-                      </span>
-                      <span className="block text-sm text-muted-foreground">
-                        {role.description}
-                      </span>
-                    </span>
-                    {disabled ? (
-                      <Lock className="size-5 text-muted-foreground" aria-label="Not available yet" />
-                    ) : (
-                      <span
-                        className={cn(
-                          "grid size-6 shrink-0 place-items-center rounded-full border-2",
-                          active ? "border-primary bg-primary text-primary-foreground" : "border-input",
-                        )}
-                        aria-hidden
-                      >
-                        {active && <Check className="size-4" />}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            <Button size="xl" className="mt-8 w-full" onClick={handleContinue}>
-              Continue as {current?.label}
-              <ArrowRight />
-            </Button>
-            <p className="mt-2 text-center">
-              <Ur className="text-base text-muted-foreground">جاری رکھیں</Ur>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {mode === "login"
+                ? "Sign in to continue to your Sathi dashboard."
+                : "Create a citizen account to get started."}
             </p>
-            <p className="mt-4 text-center text-sm text-muted-foreground">
-              Demo only. No personal information is collected or stored.
+
+            <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+              <div className="space-y-2">
+                <label htmlFor="email" className="text-sm font-semibold">
+                  Email address
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="you@example.com"
+                  className="h-12 w-full rounded-xl border border-input bg-background px-4 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="password" className="text-sm font-semibold">
+                  Password
+                </label>
+                <input
+                  id="password"
+                  type="password"
+                  autoComplete={mode === "login" ? "current-password" : "new-password"}
+                  required
+                  minLength={6}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Enter your password"
+                  className="h-12 w-full rounded-xl border border-input bg-background px-4 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+
+              {error && (
+                <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                  {error}
+                </div>
+              )}
+
+              {message && (
+                <div role="status" className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm text-foreground">
+                  {message}
+                </div>
+              )}
+
+              <Button type="submit" size="xl" className="w-full" disabled={loading}>
+                {loading
+                  ? "Please wait..."
+                  : mode === "login"
+                    ? "Sign in"
+                    : "Create account"}
+                {!loading && <ArrowRight />}
+              </Button>
+            </form>
+
+            <p className="mt-6 text-center text-sm text-muted-foreground">
+              {mode === "login" ? "New to Sathi?" : "Already have an account?"}{" "}
+              <button
+                type="button"
+                className="font-semibold text-primary underline underline-offset-4"
+                onClick={() => {
+                  setMode(mode === "login" ? "signup" : "login");
+                  setError("");
+                  setMessage("");
+                }}
+              >
+                {mode === "login" ? "Create an account" : "Sign in"}
+              </button>
+            </p>
+
+            <p className="mt-6 text-center text-xs text-muted-foreground">
+              Prototype only. Use synthetic information, not real government or personal records.
             </p>
           </div>
         </main>

@@ -10,6 +10,8 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminRouteImport } from './routes/admin'
+import { Route as AuditorRouteImport } from './routes/auditor'
 import { Route as CitizenRouteImport } from './routes/citizen'
 import { Route as HelperRouteImport } from './routes/helper'
 import { Route as LoginRouteImport } from './routes/login'
@@ -18,6 +20,16 @@ import { Route as OfficerRouteImport } from './routes/officer'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuditorRoute = AuditorRouteImport.update({
+  id: '/auditor',
+  path: '/auditor',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CitizenRoute = CitizenRouteImport.update({
@@ -43,6 +55,8 @@ const OfficerRoute = OfficerRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/auditor': typeof AuditorRoute
   '/citizen': typeof CitizenRoute
   '/helper': typeof HelperRoute
   '/login': typeof LoginRoute
@@ -50,6 +64,8 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/auditor': typeof AuditorRoute
   '/citizen': typeof CitizenRoute
   '/helper': typeof HelperRoute
   '/login': typeof LoginRoute
@@ -58,6 +74,8 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/auditor': typeof AuditorRoute
   '/citizen': typeof CitizenRoute
   '/helper': typeof HelperRoute
   '/login': typeof LoginRoute
@@ -65,14 +83,26 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/citizen' | '/helper' | '/login' | '/officer'
+  fullPaths:
+    '/' | '/admin' | '/auditor' | '/citizen' | '/helper' | '/login' | '/officer'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/citizen' | '/helper' | '/login' | '/officer'
-  id: '__root__' | '/' | '/citizen' | '/helper' | '/login' | '/officer'
+  to:
+    '/' | '/admin' | '/auditor' | '/citizen' | '/helper' | '/login' | '/officer'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/auditor'
+    | '/citizen'
+    | '/helper'
+    | '/login'
+    | '/officer'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRoute
+  AuditorRoute: typeof AuditorRoute
   CitizenRoute: typeof CitizenRoute
   HelperRoute: typeof HelperRoute
   LoginRoute: typeof LoginRoute
@@ -86,6 +116,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auditor': {
+      id: '/auditor'
+      path: '/auditor'
+      fullPath: '/auditor'
+      preLoaderRoute: typeof AuditorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/citizen': {
@@ -121,6 +165,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRoute,
+  AuditorRoute: AuditorRoute,
   CitizenRoute: CitizenRoute,
   HelperRoute: HelperRoute,
   LoginRoute: LoginRoute,

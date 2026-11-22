@@ -1,172 +1,155 @@
-import type { ReactNode } from "react";
-import { Link } from "@tanstack/react-router";
-import { ArrowLeftRight, RotateCcw, type LucideIcon } from "lucide-react";
+
+import { useEffect, useState, type ReactNode } from "react";
+import { LogOut } from "lucide-react";
 import { toast } from "sonner";
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { demoActions } from "@/lib/demo-store";
+import { getSupabase } from "@/lib/supabase";
+import { Logo } from "@/components/sathi/Logo";
+import { PrototypeBanner } from "@/components/sathi/PrototypeBanner";
+import type { RoleId } from "@/lib/roles";
 
-import { Logo } from "./Logo";
-import { PrototypeBanner } from "./PrototypeBanner";
-import { Ur } from "./Ur";
-import { getRole, type RoleId } from "@/lib/roles";
-
-export interface ShellNavItem {
-  id: string;
-  label: string;
-  urdu: string;
-  icon: LucideIcon;
+interface DashboardShellProps {
+  role: RoleId;
+  children: ReactNode;
 }
+
+const rolePaths: Record<string, string> = {
+  citizen: "/citizen",
+  helper: "/helper",
+  officer: "/officer",
+  auditor: "/auditor",
+  admin: "/login",
+};
 
 export function DashboardShell({
   role,
-  userName,
-  userMeta,
-  nav,
   children,
-}: {
-  role: RoleId;
-  userName: string;
-  userMeta: string;
-  nav: ShellNavItem[];
-  children: ReactNode;
-}) {
-  const info = getRole(role);
-  const initials = userName
-    .split(" ")
-    .map((p) => p[0])
-    .join("")
-    .slice(0, 2);
+}: DashboardShellProps) {
+  const [loading, setLoading] = useState(true);
+  const [userName, setUserName] = useState("");
+  const [userEmail, setUserEmail] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    async function verifySession() {
+      try {
+        const supabase = getSupabase();
+
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
+
+        if (sessionError) throw sessionError;
+
+        if (!session) {
+          window.location.href = "/login";
+          return;
+        }
+
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("full_name, role")
+          .eq("id", session.user.id)
+          .single();
+
+        if (profileError) throw profileError;
+
+        const actualRole = profile?.role;
+
+        if (actualRole !== role) {
+          const destination =
+            actualRole && rolePaths[actualRole]
+              ? rolePaths[actualRole]
+              : "/login";
+
+          window.location.href = destination;
+          return;
+        }
+
+        if (active) {
+          setUserName(profile?.full_name ?? "User");
+          setUserEmail(session.user.email ?? "");
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error("Session verification failed:", error);
+
+        if (active) {
+          toast.error("Session verification failed. Please log in again.");
+          window.location.href = "/login";
+        }
+      }
+    }
+
+    verifySession();
+
+    return () => {
+      active = false;
+    };
+  }, [role]);
+
+  async function handleSignOut() {
+    try {
+      const supabase = getSupabase();
+      const { error } = await supabase.auth.signOut();
+
+      if (error) throw error;
+
+      window.location.href = "/login";
+    } catch (error) {
+      console.error("Sign out failed:", error);
+      toast.error("Unable to sign out. Please try again.");
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" />
+          <p className="text-sm text-muted-foreground">
+            Verifying secure session...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="sticky top-0 z-40">
-        <PrototypeBanner />
-        <header className="bg-gradient-navy text-primary-foreground">
-          <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-            <div className="flex min-w-0 items-center gap-4">
-              <Logo tone="light" />
-              <span className="hidden h-8 w-px bg-primary-foreground/20 sm:block" aria-hidden />
-              <div className="hidden min-w-0 sm:block">
-                <p className="text-sm font-semibold">{info.label} dashboard</p>
-                <Ur className="text-xs text-primary-foreground/70">{info.urdu}</Ur>
-              </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-              <div className="hidden text-right lg:block">
-                <p className="text-sm font-semibold">{userName}</p>
-                <p className="text-xs text-primary-foreground/70">{userMeta}</p>
-              </div>
-              <span
-                className="hidden size-10 place-items-center rounded-full bg-gold text-sm font-bold text-gold-foreground sm:grid"
-                aria-hidden
-              >
-                {initials}
-              </span>
-              <ResetDemoButton />
-              <Link
-                to="/login"
-                className="inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-xl border border-primary-foreground/25 px-3 text-sm font-semibold hover:bg-primary-foreground/10"
-              >
-                <ArrowLeftRight className="size-4" aria-hidden />
-                <span className="hidden sm:inline">Switch role</span>
-                <span className="sr-only sm:hidden">Switch role</span>
-              </Link>
-            </div>
-          </div>
-          {/* Mobile section nav */}
-          <nav
-            aria-label="Dashboard sections"
-            className="scrollbar-none flex gap-2 overflow-x-auto border-t border-primary-foreground/10 px-4 py-2 lg:hidden"
-          >
-            {nav.map((item) => (
-              <a
-                key={item.id}
-                href={`#${item.id}`}
-                className="inline-flex shrink-0 items-center gap-2 rounded-full bg-primary-foreground/10 px-4 py-2 text-sm font-semibold hover:bg-primary-foreground/20"
-              >
-                <item.icon className="size-4" aria-hidden />
-                {item.label}
-              </a>
-            ))}
-          </nav>
-        </header>
-      </div>
+      <PrototypeBanner />
 
-      <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[240px_1fr] lg:py-8">
-        <aside className="hidden lg:block">
-          <nav
-            aria-label="Dashboard sections"
-            className="sticky top-32 space-y-1 rounded-3xl border bg-card p-3 shadow-card"
-          >
-            {nav.map((item) => (
-              <a
-                key={item.id}
-                href={`#${item.id}`}
-                className="flex items-center gap-3 rounded-2xl px-3 py-3 text-foreground transition-colors hover:bg-secondary"
-              >
-                <span className="grid size-9 place-items-center rounded-xl bg-secondary text-primary">
-                  <item.icon className="size-5" aria-hidden />
-                </span>
-                <span className="flex flex-col leading-tight">
-                  <span className="font-semibold">{item.label}</span>
-                  <Ur className="text-xs text-muted-foreground">{item.urdu}</Ur>
-                </span>
-              </a>
-            ))}
-          </nav>
-        </aside>
-        <main className="min-w-0 space-y-6">{children}</main>
-      </div>
+      <header className="border-b bg-card">
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between gap-4">
+          <Logo />
+
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:block text-right">
+              <p className="text-sm font-medium">{userName}</p>
+              <p className="text-xs text-muted-foreground">{userEmail}</p>
+              <p className="text-xs capitalize text-muted-foreground">
+                {role} account
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-muted"
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline">Sign out</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="container mx-auto px-4 py-6">
+        {children}
+      </main>
     </div>
   );
 }
 
-function ResetDemoButton() {
-  return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <button
-          type="button"
-          aria-label="Reset demo"
-          className="inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-xl bg-gold px-3 text-sm font-semibold text-gold-foreground hover:bg-gold/90"
-        >
-          <RotateCcw className="size-4" aria-hidden />
-          <span className="sm:hidden">Reset</span>
-          <span className="hidden sm:inline">Reset demo</span>
-        </button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Reset the demo?</AlertDialogTitle>
-          <AlertDialogDescription>
-            <Ur className="block">ڈیمو دوبارہ شروع کریں؟</Ur>
-            All uploads, approvals and returns made in this browser will be cleared and the
-            original sample records restored.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={() => {
-              demoActions.reset();
-              toast.success("Demo reset", { description: "Original sample records restored." });
-            }}
-          >
-            Yes, reset demo
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}

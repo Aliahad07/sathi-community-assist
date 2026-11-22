@@ -1,3 +1,5 @@
+
+import { RealApplicationPanel } from "@/components/sathi/RealApplicationPanel";
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
@@ -30,6 +32,7 @@ import { DashboardShell, type ShellNavItem } from "@/components/sathi/DashboardS
 import { Section } from "@/components/sathi/Section";
 import { DemoBadge, StatusBadge } from "@/components/sathi/StatusBadge";
 import { Ur } from "@/components/sathi/Ur";
+
 import {
   applicationSteps,
   assistantSuggestions,
@@ -37,8 +40,10 @@ import {
   demoHelper,
   docStatusMeta,
 } from "@/lib/mock-data";
+
 import { demoActions, useDemoStore } from "@/lib/demo-store";
 import { formatDateTime, stepFor, welcomeSummary } from "@/lib/demo-workflow";
+import { getSupabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/citizen")({
@@ -47,7 +52,7 @@ export const Route = createFileRoute("/citizen")({
       { title: "Citizen dashboard — Sathi AI Prototype" },
       {
         name: "description",
-        content: "Demo citizen dashboard: track applications, manage documents and ask Sathi in English or Urdu.",
+        content: "Citizen dashboard: track applications, manage documents and ask Sathi in English or Urdu.",
       },
       { property: "og:title", content: "Citizen dashboard — Sathi AI Prototype" },
       {
@@ -71,35 +76,113 @@ const nav: ShellNavItem[] = [
 
 function CitizenDashboard() {
   const store = useDemoStore();
-  const applications = store.applications.filter((a) => a.citizenId === demoCitizen.citizenId);
-  const documents = store.documents;
+
+  const [profileName, setProfileName] = useState("Citizen");
+  const [profileEmail, setProfileEmail] = useState("");
+
   const [uploadFor, setUploadFor] = useState<string | null>(null);
 
-  const returnedApps = applications.filter((a) => a.status === "returned");
-  const uploadTarget = applications.find((a) => a.id === uploadFor);
+  // Existing sample applications are still demo data.
+  const applications = store.applications.filter(
+    (a) => a.citizenId === demoCitizen.citizenId
+  );
+
+  const documents = store.documents;
+
+  // Load the currently authenticated user's real Supabase profile.
+  useEffect(() => {
+    let active = true;
+
+    async function loadProfile() {
+      try {
+        const supabase = getSupabase();
+
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
+
+        if (authError) {
+          console.error("Authentication error:", authError.message);
+          return;
+        }
+
+        if (!user) {
+          console.error("No authenticated user found.");
+          return;
+        }
+
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (!active) return;
+
+        if (profileError) {
+          console.error("Profile loading error:", profileError.message);
+        }
+
+        const actualName =
+          profile?.full_name?.trim() ||
+          user.email?.split("@")[0] ||
+          "Citizen";
+
+        setProfileName(actualName);
+        setProfileEmail(user.email || "");
+      } catch (error) {
+        console.error("Unable to load citizen profile:", error);
+      }
+    }
+
+    void loadProfile();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const returnedApps = applications.filter(
+    (a) => a.status === "returned"
+  );
+
+  const uploadTarget = applications.find(
+    (a) => a.id === uploadFor
+  );
 
   function handleDocumentSubmitted(fileName: string) {
     if (!uploadFor) return;
+
     demoActions.submitDocument(uploadFor, fileName);
+
     toast.success("Document uploaded successfully (Demo Only).", {
-      description: "Only the file name was saved in this browser — the file was not sent anywhere.",
+      description:
+        "Only the file name was saved in this browser — the file was not sent anywhere.",
     });
   }
 
   return (
     <DashboardShell
       role="citizen"
-      userName={demoCitizen.name}
-      userMeta={`${demoCitizen.citizenId} · Demo`}
+      userName={profileName}
+      userMeta={profileEmail || "Verified citizen"}
       nav={nav}
     >
       {/* Overview */}
       <section id="overview" className="scroll-mt-28">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-navy p-6 text-primary-foreground shadow-elegant sm:p-8">
           <div className="bg-pattern-grid absolute inset-0" aria-hidden />
+
           <div className="relative">
-            <Ur className="text-xl text-gold">السلام علیکم</Ur>
-            <h1 className="mt-1 text-3xl font-semibold sm:text-4xl">Welcome, {demoCitizen.name}</h1>
+            <Ur className="text-xl text-gold">
+              السلام علیکم
+            </Ur>
+
+            <h1 className="mt-1 text-3xl font-semibold sm:text-4xl">
+              Welcome, {profileName}
+            </h1>
+
             <p className="mt-2 text-primary-foreground/75">
               {welcomeSummary(applications)}
             </p>
@@ -112,14 +195,25 @@ function CitizenDashboard() {
             role="alert"
             className="mt-4 flex flex-col gap-4 rounded-2xl border border-destructive/30 bg-danger-soft p-5 sm:flex-row sm:items-center"
           >
-            <AlertCircle className="size-7 shrink-0 text-destructive" aria-hidden />
+            <AlertCircle
+              className="size-7 shrink-0 text-destructive"
+              aria-hidden
+            />
+
             <div className="flex-1">
               <p className="font-semibold text-foreground">
                 Action needed: {returned.service}
               </p>
-              <p className="text-muted-foreground">{returned.note}</p>
+              <p className="text-muted-foreground">
+                {returned.note}
+              </p>
             </div>
-            <Button variant="destructive" size="lg" onClick={() => setUploadFor(returned.id)}>
+
+            <Button
+              variant="destructive"
+              size="lg"
+              onClick={() => setUploadFor(returned.id)}
+            >
               <Upload />
               Fix now
             </Button>
@@ -136,15 +230,21 @@ function CitizenDashboard() {
               <span className="grid size-12 place-items-center rounded-xl bg-primary text-primary-foreground">
                 <item.icon className="size-6" aria-hidden />
               </span>
+
               <span>
-                <span className="block text-lg font-semibold text-foreground">{item.label}</span>
-                <Ur className="text-sm text-muted-foreground">{item.urdu}</Ur>
+                <span className="block text-lg font-semibold text-foreground">
+                  {item.label}
+                </span>
+                <Ur className="text-sm text-muted-foreground">
+                  {item.urdu}
+                </Ur>
               </span>
             </a>
           ))}
         </div>
       </section>
 
+      <RealApplicationPanel />
       <Assistant />
 
       {/* Applications */}
@@ -159,31 +259,48 @@ function CitizenDashboard() {
             <li key={app.id} className="rounded-2xl border p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-lg font-semibold text-foreground">{app.service}</p>
-                  <Ur className="text-sm text-muted-foreground">{app.serviceUrdu}</Ur>
+                  <p className="text-lg font-semibold text-foreground">
+                    {app.service}
+                  </p>
+
+                  <Ur className="text-sm text-muted-foreground">
+                    {app.serviceUrdu}
+                  </Ur>
+
                   <p className="text-sm text-muted-foreground">
                     {app.id} · {app.department} · Submitted {app.submitted}
                   </p>
                 </div>
+
                 <StatusBadge status={app.status} />
               </div>
+
               <ol className="mt-5 grid grid-cols-4 gap-2" aria-label="Progress">
                 {applicationSteps.map((s, i) => {
                   const step = stepFor(app.status);
                   const done = i < step;
-                  const isReturned = app.status === "returned" && i === step - 1;
+                  const isReturned =
+                    app.status === "returned" && i === step - 1;
+
                   return (
                     <li key={s.label} className="flex flex-col gap-2">
                       <span
                         className={cn(
                           "h-2 rounded-full",
-                          isReturned ? "bg-destructive" : done ? "bg-primary" : "bg-border",
+                          isReturned
+                            ? "bg-destructive"
+                            : done
+                              ? "bg-primary"
+                              : "bg-border"
                         )}
                       />
+
                       <span
                         className={cn(
                           "text-xs font-semibold sm:text-sm",
-                          done ? "text-foreground" : "text-muted-foreground",
+                          done
+                            ? "text-foreground"
+                            : "text-muted-foreground"
                         )}
                       >
                         {s.label}
@@ -192,17 +309,25 @@ function CitizenDashboard() {
                   );
                 })}
               </ol>
+
               {app.submission && (
                 <p className="mt-4 text-sm text-muted-foreground">
-                  Document: <span className="font-medium text-foreground">{app.submission.fileName}</span>{" "}
+                  Document:{" "}
+                  <span className="font-medium text-foreground">
+                    {app.submission.fileName}
+                  </span>{" "}
                   · uploaded {formatDateTime(app.submission.uploadedAt)} (demo)
                 </p>
               )}
-              {app.decision?.outcome === "approved" && app.status === "approved" && (
-                <p className="mt-4 rounded-xl bg-success-soft px-4 py-3 text-sm text-foreground">
-                  Approved by {app.decision.officer} on {formatDateTime(app.decision.decidedAt)} (demo)
-                </p>
-              )}
+
+              {app.decision?.outcome === "approved" &&
+                app.status === "approved" && (
+                  <p className="mt-4 rounded-xl bg-success-soft px-4 py-3 text-sm text-foreground">
+                    Approved by {app.decision.officer} on{" "}
+                    {formatDateTime(app.decision.decidedAt)} (demo)
+                  </p>
+                )}
+
               {app.note && (
                 <p className="mt-4 rounded-xl bg-danger-soft px-4 py-3 text-sm text-destructive">
                   Officer note: {app.note}
@@ -214,25 +339,46 @@ function CitizenDashboard() {
       </Section>
 
       {/* Documents */}
-      <Section id="documents" title="My documents" urdu="میرے کاغذات" action={<DemoBadge />}>
+      <Section
+        id="documents"
+        title="My documents"
+        urdu="میرے کاغذات"
+        action={<DemoBadge />}
+      >
         <ul className="divide-y rounded-2xl border">
           {documents.map((doc) => {
             const meta = docStatusMeta[doc.status];
+
             return (
-              <li key={doc.name} className="flex flex-wrap items-center gap-4 p-4">
+              <li
+                key={doc.name}
+                className="flex flex-wrap items-center gap-4 p-4"
+              >
                 <span className="grid size-11 place-items-center rounded-xl bg-secondary text-primary">
                   <FileText className="size-5" aria-hidden />
                 </span>
+
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-foreground">{doc.name}</p>
+                  <p className="font-semibold text-foreground">
+                    {doc.name}
+                  </p>
+
                   <p className="text-sm text-muted-foreground">
-                    <Ur className="me-2">{doc.urdu}</Ur>· Updated {doc.updated}
+                    <Ur className="me-2">{doc.urdu}</Ur>
+                    · Updated {doc.updated}
                     {doc.fileName && <> · {doc.fileName}</>}
                   </p>
                 </div>
-                <Badge variant={meta.variant}>{meta.label}</Badge>
+
+                <Badge variant={meta.variant}>
+                  {meta.label}
+                </Badge>
+
                 {doc.status === "needs_update" && doc.applicationId && (
-                  <Button size="sm" onClick={() => setUploadFor(doc.applicationId ?? null)}>
+                  <Button
+                    size="sm"
+                    onClick={() => setUploadFor(doc.applicationId ?? null)}
+                  >
                     <Upload />
                     Upload again
                   </Button>
@@ -244,21 +390,40 @@ function CitizenDashboard() {
       </Section>
 
       {/* Help */}
-      <Section id="help" title="Get help" urdu="مدد حاصل کریں">
+      <Section
+        id="help"
+        title="Get help"
+        urdu="مدد حاصل کریں"
+      >
         <div className="grid gap-4 md:grid-cols-2">
           <div className="rounded-2xl border bg-gold-soft p-5">
-            <p className="text-sm font-semibold text-accent-foreground">Your community helper</p>
-            <p className="mt-1 text-xl font-semibold text-primary">{demoHelper.name}</p>
+            <p className="text-sm font-semibold text-accent-foreground">
+              Your community helper
+            </p>
+
+            <p className="mt-1 text-xl font-semibold text-primary">
+              {demoHelper.name}
+            </p>
+
             <p className="mt-1 flex items-center gap-2 text-muted-foreground">
-              <MapPin className="size-4" aria-hidden /> {demoHelper.area} · Tue & Thu
+              <MapPin className="size-4" aria-hidden />
+              {demoHelper.area} · Tue & Thu
             </p>
           </div>
+
           <div className="rounded-2xl border p-5">
-            <p className="text-sm font-semibold text-muted-foreground">Demo helpline</p>
-            <p className="mt-1 flex items-center gap-2 text-xl font-semibold text-primary">
-              <Phone className="size-5" aria-hidden /> 0000-000000
+            <p className="text-sm font-semibold text-muted-foreground">
+              Demo helpline
             </p>
-            <p className="mt-1 text-muted-foreground">Placeholder number. Not a real service.</p>
+
+            <p className="mt-1 flex items-center gap-2 text-xl font-semibold text-primary">
+              <Phone className="size-5" aria-hidden />
+              0000-000000
+            </p>
+
+            <p className="mt-1 text-muted-foreground">
+              Placeholder number. Not a real service.
+            </p>
           </div>
         </div>
       </Section>
@@ -298,32 +463,42 @@ function UploadDialog({
       setPreviewUrl(null);
       return;
     }
+
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
+
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
   function reset() {
     setFile(null);
-    if (inputRef.current) inputRef.current.value = "";
+
+    if (inputRef.current) {
+      inputRef.current.value = "";
+    }
   }
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const selected = e.target.files?.[0];
     if (!selected) return;
+
     const ext = selected.name.split(".").pop()?.toLowerCase() ?? "";
+
     if (!ACCEPTED_EXTENSIONS.includes(ext)) {
       toast.error("File type not supported", {
         description: "Please choose a JPG, JPEG, PNG or PDF file.",
       });
+
       e.target.value = "";
       return;
     }
+
     setFile(selected);
   }
 
   function handleSubmit() {
     if (!file) return;
+
     onSubmitted(file.name);
     onOpenChange(false);
     reset();
@@ -339,9 +514,15 @@ function UploadDialog({
     >
       <DialogContent className="grid-cols-[minmax(0,1fr)] sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Upload document{serviceName ? ` — ${serviceName}` : ""}</DialogTitle>
+          <DialogTitle>
+            Upload document{serviceName ? ` — ${serviceName}` : ""}
+          </DialogTitle>
+
           <DialogDescription>
-            <Ur className="block">دستاویز اپ لوڈ کریں</Ur>
+            <Ur className="block">
+              دستاویز اپ لوڈ کریں
+            </Ur>
+
             Choose a JPG, JPEG, PNG or PDF file. Demo only — your file stays on this device and is
             not sent to any government department or permanently stored.
           </DialogDescription>
@@ -365,11 +546,14 @@ function UploadDialog({
                 className="max-h-56 w-full rounded-xl border object-contain bg-muted"
               />
             )}
+
             <div className="flex items-center gap-3 rounded-xl border bg-muted px-4 py-3">
               <FileText className="size-5 shrink-0 text-primary" aria-hidden />
+
               <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
                 {file.name}
               </span>
+
               <Badge variant="gold">Demo</Badge>
             </div>
           </div>
@@ -380,8 +564,12 @@ function UploadDialog({
             className="flex min-h-32 w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed bg-muted/50 p-6 text-center transition-colors hover:border-primary"
           >
             <FileUp className="size-8 text-primary" aria-hidden />
-            <span className="font-semibold text-foreground">Choose a file</span>
-            <span className="text-sm text-muted-foreground">JPG, JPEG, PNG or PDF</span>
+            <span className="font-semibold text-foreground">
+              Choose a file
+            </span>
+            <span className="text-sm text-muted-foreground">
+              JPG, JPEG, PNG or PDF
+            </span>
           </button>
         )}
 
@@ -395,6 +583,7 @@ function UploadDialog({
             <Upload />
             {file ? "Choose a different file" : "Browse files"}
           </Button>
+
           <Button
             type="button"
             size="lg"
@@ -424,20 +613,28 @@ function Assistant() {
       text: "Hello! I am Sathi. Ask me about your applications or documents. Tap a question below to start.",
     },
   ]);
+
   const [draft, setDraft] = useState("");
 
   function ask(question: string, answer: string, urdu = false) {
-    setMessages((m) => [...m, { from: "user", text: question, urdu }, { from: "sathi", text: answer }]);
+    setMessages((m) => [
+      ...m,
+      { from: "user", text: question, urdu },
+      { from: "sathi", text: answer },
+    ]);
   }
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
+
     const q = draft.trim();
     if (!q) return;
+
     ask(
       q,
-      "Thanks for your question. In this prototype I give sample answers only — try one of the suggested questions to see how Sathi guides you.",
+      "Thanks for your question. In this prototype I give sample answers only — try one of the suggested questions to see how Sathi guides you."
     );
+
     setDraft("");
   }
 
@@ -459,7 +656,7 @@ function Assistant() {
               "max-w-[85%] rounded-2xl px-4 py-3",
               m.from === "user"
                 ? "ml-auto rounded-br-md bg-primary text-primary-foreground"
-                : "rounded-bl-md border bg-card text-card-foreground",
+                : "rounded-bl-md border bg-card text-card-foreground"
             )}
           >
             {m.urdu ? <Ur>{m.text}</Ur> : m.text}
@@ -475,8 +672,13 @@ function Assistant() {
             onClick={() => ask(s.qUrdu, s.a, true)}
             className="rounded-2xl border-2 bg-card p-3 text-left transition-colors hover:border-primary"
           >
-            <span className="block font-semibold text-foreground">{s.q}</span>
-            <Ur className="text-sm text-muted-foreground">{s.qUrdu}</Ur>
+            <span className="block font-semibold text-foreground">
+              {s.q}
+            </span>
+
+            <Ur className="text-sm text-muted-foreground">
+              {s.qUrdu}
+            </Ur>
           </button>
         ))}
       </div>
@@ -485,6 +687,7 @@ function Assistant() {
         <label htmlFor="ask-sathi" className="sr-only">
           Type your question
         </label>
+
         <Input
           id="ask-sathi"
           value={draft}
@@ -492,6 +695,7 @@ function Assistant() {
           placeholder="Type your question / اپنا سوال لکھیں"
           className="h-12 rounded-xl text-base"
         />
+
         <Button type="submit" size="lg" aria-label="Send question">
           <Send />
           <span className="hidden sm:inline">Send</span>

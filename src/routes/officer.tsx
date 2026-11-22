@@ -1,437 +1,562 @@
-import { useMemo, useState } from "react";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
-  BarChart3,
+  Activity,
   CheckCircle2,
   Clock,
   Eye,
   FileText,
-  HandHeart,
-  Inbox,
   LayoutGrid,
   ListChecks,
+  RefreshCw,
   RotateCcw,
-  Timer,
+  ShieldCheck,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { DashboardShell, type ShellNavItem } from "@/components/sathi/DashboardShell";
 import { Section } from "@/components/sathi/Section";
-import { StatCard } from "@/components/sathi/StatCard";
-import { DemoBadge, StatusBadge } from "@/components/sathi/StatusBadge";
-import { Ur } from "@/components/sathi/Ur";
-import {
-  demoOfficer,
-  statusMeta,
-  weeklyVolume,
-  type AppStatus,
-  type DemoApplication,
-} from "@/lib/mock-data";
-import { demoActions, useDemoStore } from "@/lib/demo-store";
-import { formatDateTime, isOpenForDecision } from "@/lib/demo-workflow";
-import { cn } from "@/lib/utils";
+
+import { getSupabase } from "@/lib/supabase";
 
 export const Route = createFileRoute("/officer")({
   head: () => ({
     meta: [
-      { title: "Officer dashboard — Sathi AI Prototype" },
+      { title: "Officer Dashboard — SATHI AI" },
       {
         name: "description",
-        content: "Demo dashboard for department officers reviewing citizen applications.",
+        content: "Real application review dashboard for SATHI AI.",
       },
-      { property: "og:title", content: "Officer dashboard — Sathi AI Prototype" },
-      {
-        property: "og:description",
-        content: "See how officers review and decide applications in the Sathi AI demo.",
-      },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: OfficerDashboard,
 });
 
+interface OfficerCase {
+  application_id: string;
+  family_id: string;
+  family_name: string;
+  application_type: string;
+  description: string;
+  application_status: string;
+  application_created_at: string;
+  assignment_id: string;
+  assigned_at: string;
+  ai_outcome: string | null;
+  ai_confidence: number | null;
+  ai_human_required: boolean | null;
+  ai_explanation: string | null;
+}
+
 const nav: ShellNavItem[] = [
   { id: "overview", label: "Overview", urdu: "جائزہ", icon: LayoutGrid },
   { id: "queue", label: "Application queue", urdu: "درخواستوں کی قطار", icon: ListChecks },
-  { id: "activity", label: "Weekly activity", urdu: "ہفتہ وار سرگرمی", icon: BarChart3 },
+  { id: "activity", label: "Review information", urdu: "جائزے کی معلومات", icon: Activity },
 ];
 
-type Filter = AppStatus | "all";
-const filterOrder: Filter[] = ["all", "doc_pending", "submitted", "in_review", "approved", "returned"];
+function formatDate(value: string) {
+  return new Date(value).toLocaleString("en-PK", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+function formatConfidence(value: number | null) {
+  if (value === null || value === undefined) return "Not available";
+  const percent = value <= 1 ? value * 100 : value;
+  return `${Math.round(percent)}%`;
+}
 
 function OfficerDashboard() {
-  const { applications } = useDemoStore();
-  const queue = useMemo(() => applications.filter((a) => a.inOfficerQueue), [applications]);
-  const [filter, setFilter] = useState<Filter>("all");
-  const [detailsId, setDetailsId] = useState<string | null>(null);
-  const [returnId, setReturnId] = useState<string | null>(null);
-  const details = queue.find((q) => q.id === detailsId);
-  const returning = queue.find((q) => q.id === returnId);
+  const [cases, setCases] = useState<OfficerCase[]>([]);
+  const [officerName, setOfficerName] = useState("Department Officer");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState("");
+  const [filter, setFilter] = useState("all");
+
+  const loadCases = useCallback(async (silent = false) => {
+    if (silent) setRefreshing(true);
+    else setLoading(true);
+
+    setError("");
+
+    try {
+      const supabase = getSupabase();
+
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+
+      if (authError) throw authError;
+      if (!user) throw new Error("Please log in again.");
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("full_name, role")
+        .eq("id", user.id)
+        .single();
+
+      if (profileError) throw profileError;
+
+      if (profile.role !== "officer") {
+        throw new Error("Officer access is required.");
+      }
+
+      setOfficerName(profile.full_name || "Department Officer");
+
+      const { data, error: queueError } = await supabase.rpc(
+        "get_officer_case_queue"
+      );
+
+      if (queueError) throw queueError;
+
+      setCases((data ?? []) as OfficerCase[]);
+    } catch (err) {
+      console.error("Officer queue error:", err);
+      const message =
+        err instanceof Error ? err.message : "Unable to load officer queue.";
+      setError(message);
+      if (silent) toast.error(message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCases();
+  }, [loadCases]);
 
   const counts = useMemo(() => {
-    const c: Record<Filter, number> = { all: queue.length, submitted: 0, in_review: 0, approved: 0, returned: 0, doc_pending: 0 };
-    queue.forEach((q) => (c[q.status] += 1));
-    return c;
-  }, [queue]);
+    return {
+      all: cases.length,
+      pending: cases.filter((c) => c.application_status === "pending").length,
+      under_review: cases.filter(
+        (c) => c.application_status === "under_review"
+      ).length,
+      approved: cases.filter((c) => c.application_status === "approved").length,
+      rejected: cases.filter((c) => c.application_status === "rejected").length,
+    };
+  }, [cases]);
 
-  const visible = filter === "all" ? queue : queue.filter((q) => q.status === filter);
-  const maxVolume = Math.max(...weeklyVolume.map((d) => d.count));
+  const visibleCases = useMemo(() => {
+    if (filter === "all") return cases;
+    return cases.filter((c) => c.application_status === filter);
+  }, [cases, filter]);
 
-  function approve(id: string) {
-    demoActions.approve(id);
-    toast.success(`${id} marked as approved`, {
-      description: "Demo action — saved in this browser only, nothing is sent to any real system.",
-    });
-  }
+  const selectedCase = cases.find(
+    (c) => c.application_id === selectedId
+  );
 
-  function confirmReturn(id: string, reason: string) {
-    demoActions.returnWithReason(id, reason);
-    setReturnId(null);
-    toast.success(`${id} returned to the applicant`, {
-      description: "Demo action — your reason is shown on the citizen dashboard.",
-    });
+  async function changeStatus(
+    item: OfficerCase,
+    newStatus: "under_review" | "approved" | "rejected"
+  ) {
+    const cleanReason = reason.trim();
+
+    if (cleanReason.length < 5) {
+      toast.error("Please enter a meaningful reason (at least 5 characters).");
+      return;
+    }
+
+    setProcessingId(item.application_id);
+
+    try {
+      const supabase = getSupabase();
+
+      const { error: rpcError } = await supabase.rpc(
+        "transition_application",
+        {
+          p_application_id: item.application_id,
+          p_new_status: newStatus,
+          p_reason: cleanReason,
+        }
+      );
+
+      if (rpcError) throw rpcError;
+
+      const labels: Record<string, string> = {
+        under_review: "Application moved to review.",
+        approved: "Application approved.",
+        rejected: "Application rejected.",
+      };
+
+      toast.success(labels[newStatus]);
+      setReason("");
+      setSelectedId(null);
+      await loadCases(true);
+    } catch (err) {
+      console.error("Application transition error:", err);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Unable to update application."
+      );
+    } finally {
+      setProcessingId(null);
+    }
   }
 
   return (
     <DashboardShell
       role="officer"
-      userName={demoOfficer.name}
-      userMeta={`${demoOfficer.title} · Demo`}
+      userName={officerName}
+      userMeta="Authenticated department officer"
       nav={nav}
     >
-      <section id="overview" className="scroll-mt-28 space-y-4">
+      <section id="overview" className="scroll-mt-28 space-y-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-sm font-bold uppercase tracking-[0.16em] text-accent-foreground">
-              {demoOfficer.department}
+            <p className="text-sm font-bold uppercase tracking-widest text-accent-foreground">
+              Department Review
             </p>
             <h1 className="mt-1 text-3xl font-semibold text-primary sm:text-4xl">
-              Review desk
+              Officer Dashboard
             </h1>
-            <Ur className="text-lg text-muted-foreground">جائزہ ڈیسک</Ur>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Review and process your assigned citizen applications.
+            </p>
           </div>
-          <DemoBadge />
+
+          <Button
+            variant="outline"
+            onClick={() => void loadCases(true)}
+            disabled={refreshing || loading}
+          >
+            <RefreshCw className={refreshing ? "animate-spin" : ""} />
+            Refresh queue
+          </Button>
         </div>
+
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatCard label="New" urdu="نئی" value={counts.submitted} icon={Inbox} hint="Waiting to be opened" />
-          <StatCard label="In review" urdu="زیرِ جائزہ" value={counts.in_review} icon={Clock} />
-          <StatCard label="Approved" urdu="منظور شدہ" value={counts.approved} icon={CheckCircle2} />
-          <StatCard label="Avg. decision" urdu="اوسط وقت" value="4.2d" icon={Timer} hint="Demo figure" />
+          <Stat
+            label="Assigned cases"
+            value={counts.all}
+            icon={<ListChecks />}
+          />
+          <Stat
+            label="Pending"
+            value={counts.pending}
+            icon={<Clock />}
+          />
+          <Stat
+            label="Under review"
+            value={counts.under_review}
+            icon={<Eye />}
+          />
+          <Stat
+            label="Approved"
+            value={counts.approved}
+            icon={<CheckCircle2 />}
+          />
         </div>
       </section>
 
       <Section
         id="queue"
-        title="Application queue"
+        title="Assigned application queue"
         urdu="درخواستوں کی قطار"
-        description="Open, approve or return applications. Decisions are saved in this browser for the demo."
+        description="Only applications assigned to your authenticated officer account are shown."
       >
-        <div className="scrollbar-none -mx-1 flex gap-2 overflow-x-auto px-1 pb-1" role="group" aria-label="Filter by status">
-          {filterOrder.map((f) => (
-            <button
-              key={f}
-              type="button"
-              aria-pressed={filter === f}
-              onClick={() => setFilter(f)}
-              className={cn(
-                "inline-flex h-11 shrink-0 items-center gap-2 rounded-xl border-2 px-4 font-semibold transition-colors",
-                filter === f
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "bg-card text-foreground hover:border-primary/40",
-              )}
-            >
-              {f === "all" ? "All" : statusMeta[f].label}
-              <span
-                className={cn(
-                  "rounded-full px-2 text-sm",
-                  filter === f ? "bg-primary-foreground/20" : "bg-secondary",
-                )}
+        <div className="flex flex-wrap gap-2">
+          {["all", "pending", "under_review", "approved", "rejected"].map(
+            (status) => (
+              <button
+                key={status}
+                type="button"
+                onClick={() => setFilter(status)}
+                aria-pressed={filter === status}
+                className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                  filter === status
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "bg-card text-foreground hover:border-primary"
+                }`}
               >
-                {counts[f]}
-              </span>
-            </button>
-          ))}
+                {status === "all"
+                  ? "All"
+                  : status.replace("_", " ").replace(/\b\w/g, (c) =>
+                      c.toUpperCase()
+                    )}
+                {" "}
+                ({counts[status as keyof typeof counts]})
+              </button>
+            )
+          )}
         </div>
 
-        <ul className="mt-5 space-y-3">
-          {visible.map((item) => {
-            const open = isOpenForDecision(item.status);
-            return (
+        {error && (
+          <div className="mt-4 rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-sm">
+            <div className="flex items-center gap-2 font-semibold text-destructive">
+              <AlertTriangle className="size-4" />
+              Unable to load officer queue
+            </div>
+            <p className="mt-1 text-foreground">{error}</p>
+            <Button
+              className="mt-3"
+              size="sm"
+              variant="outline"
+              onClick={() => void loadCases()}
+            >
+              Try again
+            </Button>
+          </div>
+        )}
+
+        {loading ? (
+          <p className="py-10 text-center text-muted-foreground">
+            Loading assigned applications...
+          </p>
+        ) : visibleCases.length === 0 ? (
+          <div className="rounded-2xl border border-dashed p-10 text-center">
+            <FileText className="mx-auto mb-3 size-9 text-muted-foreground" />
+            <p className="font-semibold">No applications found</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              There are no assigned applications matching this filter.
+            </p>
+          </div>
+        ) : (
+          <ul className="mt-5 space-y-3">
+            {visibleCases.map((item) => (
               <li
-                key={item.id}
-                className="flex flex-col gap-4 rounded-2xl border p-4 sm:p-5 lg:flex-row lg:items-center"
+                key={item.application_id}
+                className="rounded-2xl border bg-card p-4 sm:p-5"
               >
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-sm text-muted-foreground">{item.id}</span>
-                    {item.priority === "high" && <Badge variant="gold">High priority</Badge>}
-                    {item.viaHelper && (
-                      <Badge variant="info">
-                        <HandHeart className="size-3.5" aria-hidden />
-                        Via helper
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="mt-1 text-lg font-semibold text-foreground">{item.service}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {item.applicant} · {item.area} · Submitted {item.submitted}
-                  </p>
-                  {item.submission && (
-                    <p className="mt-1 flex items-center gap-2 text-sm text-foreground">
-                      <FileText className="size-4 shrink-0 text-primary" aria-hidden />
-                      <span className="truncate font-medium">{item.submission.fileName}</span>
-                      <span className="shrink-0 text-muted-foreground">
-                        · {formatDateTime(item.submission.uploadedAt)}
-                      </span>
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="break-all font-mono text-xs text-muted-foreground">
+                      {item.application_id}
                     </p>
-                  )}
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <StatusBadge status={item.status} />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setDetailsId(item.id)}
-                    aria-label={`View details for ${item.id}`}
-                  >
-                    <Eye />
-                    Details
-                  </Button>
-                  {open && (
-                    <>
-                      <Button size="sm" variant="success" onClick={() => approve(item.id)}>
-                        <CheckCircle2 />
-                        Approve
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => setReturnId(item.id)}>
-                        <RotateCcw />
-                        Return
-                      </Button>
-                    </>
-                  )}
+                    <h3 className="mt-2 text-lg font-semibold">
+                      {item.application_type}
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Family: {item.family_name}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Submitted: {formatDate(item.application_created_at)}
+                    </p>
+                    <p className="mt-2 line-clamp-2 text-sm">
+                      {item.description}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+  className={`rounded-full px-3 py-1 text-xs font-semibold ${
+    item.application_status === "approved"
+      ? "bg-green-100 text-green-800"
+      : item.application_status === "rejected"
+        ? "bg-red-100 text-red-800"
+        : item.application_status === "under_review"
+          ? "bg-blue-100 text-blue-800"
+          : "bg-amber-100 text-amber-800"
+  }`}
+>
+  {item.application_status.replace("_", " ").toUpperCase()}
+</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        setSelectedId(item.application_id)
+                      }
+                    >
+                      <Eye />
+                      Details
+                    </Button>
+                  </div>
                 </div>
               </li>
-            );
-          })}
-          {visible.length === 0 && (
-            <li className="rounded-2xl border border-dashed p-8 text-center text-muted-foreground">
-              No applications with this status.
-            </li>
-          )}
-        </ul>
+            ))}
+          </ul>
+        )}
       </Section>
 
       <Section
         id="activity"
-        title="Weekly activity"
-        urdu="ہفتہ وار سرگرمی"
-        description="Applications received this week (synthetic)."
+        title="Review information"
+        urdu="جائزے کی معلومات"
+        description="AI provides decision support. Final benefit decisions remain with authorized human officers."
       >
-        <div className="flex h-56 items-end gap-3 sm:gap-5" role="img" aria-label="Bar chart of applications per day">
-          {weeklyVolume.map((d) => (
-            <div key={d.day} className="flex flex-1 flex-col items-center gap-2">
-              <span className="text-sm font-semibold text-primary">{d.count}</span>
-              <div
-                className="w-full rounded-t-xl bg-primary transition-all hover:bg-gold"
-                style={{ height: `${(d.count / maxVolume) * 160}px` }}
-              />
-              <span className="text-sm text-muted-foreground">{d.day}</span>
-            </div>
-          ))}
+        <div className="rounded-xl border p-4">
+          <div className="flex items-center gap-2 font-semibold">
+            <ShieldCheck className="size-5 text-primary" />
+            Human oversight enabled
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Every status change requires a reason and is processed through the
+            secure backend workflow, which records an audit entry.
+          </p>
         </div>
       </Section>
 
-      <DetailsDialog
-        app={details}
-        onClose={() => setDetailsId(null)}
-        onApprove={(id) => {
-          approve(id);
-          setDetailsId(null);
-        }}
-        onReturn={(id) => {
-          setDetailsId(null);
-          setReturnId(id);
-        }}
-      />
-      <ReturnDialog app={returning} onClose={() => setReturnId(null)} onConfirm={confirmReturn} />
+      {selectedCase && (
+        <section className="rounded-2xl border-2 border-primary/20 bg-card p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-semibold">Application details</h2>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setSelectedId(null);
+                setReason("");
+              }}
+            >
+              Close
+            </Button>
+          </div>
+
+          <div className="mt-4 space-y-3 text-sm">
+            <Detail label="Application ID" value={selectedCase.application_id} />
+            <Detail label="Family" value={selectedCase.family_name} />
+            <Detail label="Application type" value={selectedCase.application_type} />
+            <Detail
+              label="Submitted"
+              value={formatDate(selectedCase.application_created_at)}
+            />
+            <Detail
+              label="Current status"
+              value={selectedCase.application_status}
+            />
+          </div>
+
+          <div className="mt-4 rounded-xl bg-muted p-4">
+            <p className="font-semibold">Applicant description</p>
+            <p className="mt-2 whitespace-pre-wrap text-sm">
+              {selectedCase.description || "No description provided."}
+            </p>
+          </div>
+
+          <div className="mt-4 rounded-xl border p-4">
+            <div className="flex items-center gap-2 font-semibold">
+              <Activity className="size-4" />
+              AI decision support
+            </div>
+            <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+              <Detail
+                label="AI recommendation"
+                value={selectedCase.ai_outcome || "Not evaluated"}
+              />
+              <Detail
+                label="AI confidence"
+                value={formatConfidence(selectedCase.ai_confidence)}
+              />
+              <Detail
+                label="Human review required"
+                value={
+                  selectedCase.ai_human_required === null
+                    ? "Not available"
+                    : selectedCase.ai_human_required
+                      ? "Yes"
+                      : "No"
+                }
+              />
+            </div>
+            <p className="mt-3 text-sm text-muted-foreground">
+              {selectedCase.ai_explanation ||
+                "No AI explanation is available for this application yet."}
+            </p>
+            <p className="mt-3 text-xs font-medium text-muted-foreground">
+              AI output is advisory only. It does not approve or reject benefits.
+            </p>
+          </div>
+
+          {selectedCase.application_status !== "approved" &&
+            selectedCase.application_status !== "rejected" &&
+            selectedCase.application_status !== "completed" && (
+              <div className="mt-5 space-y-3">
+                <Label htmlFor="officer-reason">
+                  Reason for this action (required)
+                </Label>
+                <Textarea
+                  id="officer-reason"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Explain the reason for your status change..."
+                  rows={3}
+                />
+
+                <div className="flex flex-wrap gap-2">
+                  {selectedCase.application_status === "pending" && (
+                    <Button
+                      onClick={() =>
+                        void changeStatus(selectedCase, "under_review")
+                      }
+                      disabled={processingId === selectedCase.application_id}
+                    >
+                      <Eye />
+                      Start review
+                    </Button>
+                  )}
+
+                  {selectedCase.application_status === "under_review" && (
+                    <>
+                      <Button
+                        variant="success"
+                        onClick={() =>
+                          void changeStatus(selectedCase, "approved")
+                        }
+                        disabled={processingId === selectedCase.application_id}
+                      >
+                        <CheckCircle2 />
+                        Approve
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={() =>
+                          void changeStatus(selectedCase, "rejected")
+                        }
+                        disabled={processingId === selectedCase.application_id}
+                      >
+                        <RotateCcw />
+                        Reject
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+        </section>
+      )}
     </DashboardShell>
   );
 }
 
-function DetailsDialog({
-  app,
-  onClose,
-  onApprove,
-  onReturn,
+function Stat({
+  label,
+  value,
+  icon,
 }: {
-  app: DemoApplication | undefined;
-  onClose: () => void;
-  onApprove: (id: string) => void;
-  onReturn: (id: string) => void;
+  label: string;
+  value: number;
+  icon: React.ReactNode;
 }) {
-  const rows: [string, string][] = app
-    ? [
-        ["Application ID", app.id],
-        ["Applicant", app.applicant],
-        ["Service", app.service],
-        ["Department", app.department],
-        ["Area", app.area],
-        ["Submitted", app.submitted],
-        ["Priority", app.priority === "high" ? "High" : "Normal"],
-        ["Submitted via", app.viaHelper ? "Community helper" : "Citizen"],
-      ]
-    : [];
   return (
-    <Dialog open={app !== undefined} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-lg">
-        {app && (
-          <>
-            <DialogHeader>
-              <DialogTitle>{app.service}</DialogTitle>
-              <DialogDescription>
-                <Ur className="block">درخواست کی تفصیل</Ur>
-                Synthetic demo record — not a real applicant.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex items-center gap-2">
-              <StatusBadge status={app.status} />
-            </div>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-xl bg-muted p-4 text-sm">
-              {rows.map(([k, v]) => (
-                <div key={k} className="contents">
-                  <dt className="text-muted-foreground">{k}</dt>
-                  <dd className="font-medium text-foreground">{v}</dd>
-                </div>
-              ))}
-            </dl>
-            <div className="rounded-xl border p-4 text-sm">
-              <p className="font-semibold text-foreground">Document</p>
-              {app.submission ? (
-                <p className="mt-1 text-muted-foreground">
-                  <span className="font-medium text-foreground">{app.submission.fileName}</span>{" "}
-                  · uploaded {formatDateTime(app.submission.uploadedAt)}. Demo only — the file
-                  itself was not sent or stored.
-                </p>
-              ) : (
-                <p className="mt-1 text-muted-foreground">No new document uploaded in this demo.</p>
-              )}
-            </div>
-            {app.decision && (
-              <div className="rounded-xl border p-4 text-sm">
-                <p className="font-semibold text-foreground">Last decision</p>
-                <p className="mt-1 text-muted-foreground">
-                  {app.decision.outcome === "approved" ? "Approved" : "Returned"} by{" "}
-                  {app.decision.officer} · {formatDateTime(app.decision.decidedAt)}
-                </p>
-                {app.decision.reason && (
-                  <p className="mt-1 text-foreground">Reason: {app.decision.reason}</p>
-                )}
-              </div>
-            )}
-            {isOpenForDecision(app.status) && (
-              <DialogFooter className="gap-2">
-                <Button variant="outline" onClick={() => onReturn(app.id)}>
-                  <RotateCcw />
-                  Return
-                </Button>
-                <Button variant="success" onClick={() => onApprove(app.id)}>
-                  <CheckCircle2 />
-                  Approve
-                </Button>
-              </DialogFooter>
-            )}
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
+    <div className="rounded-2xl border bg-card p-4">
+      <div className="flex items-center justify-between gap-2 text-muted-foreground">
+        <span className="text-sm">{label}</span>
+        {icon}
+      </div>
+      <p className="mt-2 text-3xl font-bold tabular-nums">{value}</p>
+    </div>
   );
 }
 
-function ReturnDialog({
-  app,
-  onClose,
-  onConfirm,
-}: {
-  app: DemoApplication | undefined;
-  onClose: () => void;
-  onConfirm: (id: string, reason: string) => void;
-}) {
-  const [reason, setReason] = useState("");
-  const [touched, setTouched] = useState(false);
-  const missing = reason.trim().length === 0;
-
-  function close() {
-    setReason("");
-    setTouched(false);
-    onClose();
-  }
-
+function Detail({ label, value }: { label: string; value: string }) {
   return (
-    <Dialog open={app !== undefined} onOpenChange={(open) => !open && close()}>
-      <DialogContent className="sm:max-w-md">
-        {app && (
-          <form
-            className="space-y-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              setTouched(true);
-              if (missing) return;
-              onConfirm(app.id, reason);
-              setReason("");
-              setTouched(false);
-            }}
-          >
-            <DialogHeader>
-              <DialogTitle>Return {app.id}</DialogTitle>
-              <DialogDescription>
-                <Ur className="block">واپسی کی وجہ لکھیں</Ur>
-                Tell the applicant what to fix. They will see this reason on their dashboard.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-2">
-              <Label htmlFor="return-reason">Reason for returning (required)</Label>
-              <Textarea
-                id="return-reason"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                onBlur={() => setTouched(true)}
-                aria-invalid={touched && missing}
-                aria-describedby="return-reason-error"
-                rows={4}
-                placeholder="e.g. The bill photo is blurry. Please upload a clearer copy."
-                className="text-base"
-              />
-              {touched && missing && (
-                <p id="return-reason-error" className="text-sm font-medium text-destructive">
-                  Please write a reason before returning.
-                </p>
-              )}
-            </div>
-            <DialogFooter className="gap-2">
-              <Button type="button" variant="outline" onClick={close}>
-                Cancel
-              </Button>
-              <Button type="submit" variant="destructive">
-                <RotateCcw />
-                Return application
-              </Button>
-            </DialogFooter>
-          </form>
-        )}
-      </DialogContent>
-    </Dialog>
+    <div className="grid gap-1 border-b py-2 last:border-0 sm:grid-cols-[150px_1fr]">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="break-words font-medium">{value}</span>
+    </div>
   );
 }
