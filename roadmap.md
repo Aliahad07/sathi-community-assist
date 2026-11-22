@@ -18,4 +18,5 @@
 ## Later
 - [ ] Administrator dashboard
 - [ ] Backend on the user's own Supabase project — blocked: user must connect it in Project Settings → General → External Supabase
+  - First: real sign-in per role + saved applications shared across devices; then stored document files
 - [ ] Real AI assistant
